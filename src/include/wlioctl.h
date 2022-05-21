@@ -1704,6 +1704,7 @@ typedef struct  wl_chanspec_txpwr_max {
 #define WL_CHANSPEC_TXPWR_MAX_VER	1
 #define WL_CHANSPEC_TXPWR_MAX_LEN	(sizeof(wl_chanspec_txpwr_max_t))
 
+
 typedef struct tx_inst_power {
 	uint8 txpwr_est_Pout[2];			/* Latest estimate for 2.4 and 5 Ghz */
 	uint8 txpwr_est_Pout_gofdm;			/* Pwr estimate for 2.4 OFDM */
