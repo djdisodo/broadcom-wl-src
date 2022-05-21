@@ -1,7 +1,7 @@
 /*
  * pcicfg.h: PCI configuration constants and structures.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: pcicfg.h 544472 2015-03-27 10:00:03Z $
+ * $Id: pcicfg.h 316716 2012-02-23 04:39:13Z $
  */
 
 #ifndef	_h_pcicfg_
@@ -170,7 +170,6 @@ typedef struct _pci_config_regs {
 #define	PCI_CFG_MINGNT		0x3e
 #define	PCI_CFG_MAXLAT		0x3f
 #define	PCI_CFG_DEVCTRL		0xd8
-#define PCI_CFG_TLCNTRL_5	0x814
 #ifndef LINUX_POSTMOGRIFY_REMOVAL
 
 #ifdef __NetBSD__
@@ -415,7 +414,6 @@ typedef struct _pciconfig_cap_msi {
 	uint16	msgctrl;
 	uint32	msgaddr;
 } pciconfig_cap_msi;
-#define MSI_ENABLE	0x1		/* bit 0 of msgctrl */
 
 /* Data structure to define the Power managment facility
  * Valid for PCI and PCIE configurations
@@ -511,32 +509,6 @@ typedef struct _pcie_enhanced_caphdr {
 #define	PCI_GPIO_IN		0xb0	/* pci config space gpio input (>=rev3) */
 #define	PCI_GPIO_OUT		0xb4	/* pci config space gpio output (>=rev3) */
 #define	PCI_GPIO_OUTEN		0xb8	/* pci config space gpio output enable (>=rev3) */
-#define	PCI_L1SS_CTRL2		0x24c	/* The L1 PM Substates Control register */
-
-/* Private Registers */
-#define	PCI_STAT_CTRL		0xa80
-#define	PCI_L0_EVENTCNT		0xa84
-#define	PCI_L0_STATETMR		0xa88
-#define	PCI_L1_EVENTCNT		0xa8c
-#define	PCI_L1_STATETMR		0xa90
-#define	PCI_L1_1_EVENTCNT	0xa94
-#define	PCI_L1_1_STATETMR	0xa98
-#define	PCI_L1_2_EVENTCNT	0xa9c
-#define	PCI_L1_2_STATETMR	0xaa0
-#define	PCI_L2_EVENTCNT		0xaa4
-#define	PCI_L2_STATETMR		0xaa8
-
-#define	PCI_PL_SPARE	0x1808	/* Config to Increase external clkreq deasserted minimum time */
-#define	PCI_CONFIG_EXT_CLK_MIN_TIME_MASK	(1 << 31)
-#define	PCI_CONFIG_EXT_CLK_MIN_TIME_SHIFT	(31)
-
-#define PCI_REG_PMCR_TCRPW_MAX_MASK  0x1F
-
-#define	PCI_PMCR_REFUP		0x1814	/* Trefup time */
-#define	PCI_PMCR_REFUP_EXT	0x1818	/* Trefup extend Max */
-#define PCI_TPOWER_SCALE_MASK 0x3
-#define PCI_TPOWER_SCALE_SHIFT 3 /* 0:1 is scale and 2 is rsvd */
-
 
 #define	PCI_BAR0_SHADOW_OFFSET	(2 * 1024)	/* bar0 + 2K accesses sprom shadow (in pci core) */
 #define	PCI_BAR0_SPROM_OFFSET	(4 * 1024)	/* bar0 + 4K accesses external sprom */

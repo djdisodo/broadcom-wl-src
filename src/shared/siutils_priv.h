@@ -1,7 +1,7 @@
 /*
  * Include file private to the SOC Interconnect support files.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,15 +15,13 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: siutils_priv.h 553744 2015-04-30 22:37:46Z $
+ * $Id: siutils_priv.h 347470 2012-07-26 22:51:10Z $
  */
 
 #ifndef	_siutils_priv_h_
 #define	_siutils_priv_h_
 
-#if defined(BCMDBG_ERR) && defined(ERR_USE_LOG_EVENT)
-#define	SI_ERROR(args)	EVENT_LOG_COMPACT_CAST_PAREN_ARGS(EVENT_LOG_TAG_SI_ERROR, args)
-#elif defined(BCMDBG_ERR)
+#ifdef BCMDBG_ERR
 #define	SI_ERROR(args)	printf args
 #else
 #define	SI_ERROR(args)
@@ -35,7 +33,7 @@
 #define	SI_MSG(args)
 #endif	/* BCMDBG */
 
-#ifdef BCMDBG_SI
+#if defined(DSLCPE)&&defined(CONFIG_BRCM_IKOS) || defined(BCMDBG_SI)
 #define	SI_VMSG(args)	printf args
 #else
 #define	SI_VMSG(args)
@@ -47,35 +45,13 @@ typedef uint32 (*si_intrsoff_t)(void *intr_arg);
 typedef void (*si_intrsrestore_t)(void *intr_arg, uint32 arg);
 typedef bool (*si_intrsenabled_t)(void *intr_arg);
 
-
-#define SI_GPIO_MAX		16
-
-typedef struct gci_gpio_item {
+typedef struct gpioh_item {
 	void			*arg;
-	uint8			gci_gpio;
-	uint8			status;
-	gci_gpio_handler_t	handler;
-	struct gci_gpio_item	*next;
-} gci_gpio_item_t;
-
-
-typedef struct si_cores_info {
-	void	*regs[SI_MAXCORES];	/* other regs va */
-
-	uint	coreid[SI_MAXCORES];	/* id of each core */
-	uint32	coresba[SI_MAXCORES];	/* backplane address of each core */
-	void	*regs2[SI_MAXCORES];	/* va of each core second register set (usbh20) */
-	uint32	coresba2[SI_MAXCORES];	/* address of each core second register set (usbh20) */
-	uint32	coresba_size[SI_MAXCORES]; /* backplane address space size */
-	uint32	coresba2_size[SI_MAXCORES]; /* second address space size */
-
-	void	*wrappers[SI_MAXCORES];	/* other cores wrapper va */
-	uint32	wrapba[SI_MAXCORES];	/* address of controlling wrapper */
-
-	uint32	cia[SI_MAXCORES];	/* erom cia entry for each core */
-	uint32	cib[SI_MAXCORES];	/* erom cia entry for each core */
-	uint32	wrapba_sec[SI_MAXCORES]; /* address of secondary master wrapper */
-} si_cores_info_t;
+	bool			level;
+	gpio_handler_t		handler;
+	uint32			event;
+	struct gpioh_item	*next;
+} gpioh_item_t;
 
 /* misc si info needed by some of the routines */
 typedef struct si_info {
@@ -92,7 +68,7 @@ typedef struct si_info {
 
 	void *pch;			/* PCI/E core handle */
 
-	void *reserved;		/* keep it for now to avoid ROM/RAM mismatch */
+	gpioh_item_t *gpioh_head; 	/* GPIO event handlers list */
 
 	bool	memseg;			/* flag to toggle MEM_SEG register */
 
@@ -100,33 +76,27 @@ typedef struct si_info {
 	uint varsz;
 
 	void	*curmap;		/* current regs va */
+	void	*regs[SI_MAXCORES];	/* other regs va */
 
 	uint	curidx;			/* current core index */
 	uint	numcores;		/* # discovered cores */
+	uint	coreid[SI_MAXCORES];	/* id of each core */
+	uint32	coresba[SI_MAXCORES];	/* backplane address of each core */
+	void	*regs2[SI_MAXCORES];	/* va of each core second register set (usbh20) */
+	uint32	coresba2[SI_MAXCORES];	/* address of each core second register set (usbh20) */
+	uint32	coresba_size[SI_MAXCORES]; /* backplane address space size */
+	uint32	coresba2_size[SI_MAXCORES]; /* second address space size */
 
 	void	*curwrap;		/* current wrapper va */
+	void	*wrappers[SI_MAXCORES];	/* other cores wrapper va */
+	uint32	wrapba[SI_MAXCORES];	/* address of controlling wrapper */
 
+	uint32	cia[SI_MAXCORES];	/* erom cia entry for each core */
+	uint32	cib[SI_MAXCORES];	/* erom cia entry for each core */
 	uint32	oob_router;		/* oob router registers for axi */
-
-	void *cores_info;
-	/* Store NVRAM data so that it is available after reclaim. */
-	uint32 nvram_min_mask;
-	bool min_mask_valid;
-	uint32 nvram_max_mask;
-	bool max_mask_valid;
-	gci_gpio_item_t	*gci_gpio_head;	/* gci gpio interrupts head */
-	uint	chipnew;		/* new chip number */
-	uint	num_br;		/* # discovered bridges */
-	uint32	br_wrapba[SI_MAXBR];	/* address of bridge controlling wrapper */
-	uint32  xtalfreq;
-	uint32	macclk_mul_fact;	/* Multiplication factor necessary to adjust MAC Clock
-	* during ULB Mode operation. One instance where this is used is configuring TSF L-frac
-	* register
-	*/
 } si_info_t;
 
-
-#define	SI_INFO(sih)	((si_info_t *)(uintptr)sih)
+#define	SI_INFO(sih)	(si_info_t *)(uintptr)sih
 
 #define	GOODCOREADDR(x, b) (((x) >= (b)) && ((x) < ((b) + SI_MAXCORES * SI_CORE_SIZE)) && \
 		ISALIGNED((x), SI_CORE_SIZE))
@@ -154,18 +124,17 @@ typedef struct si_info {
 #define SI_FAST(si) (PCIE(si) || (PCI(si) && ((si)->pub.buscorerev >= 13)))
 
 #define PCIEREGS(si) (((char *)((si)->curmap) + PCI_16KB0_PCIREGS_OFFSET))
-#define CCREGS_FAST(si) \
-	(((si)->curmap == NULL) ? NULL : ((char *)((si)->curmap) + PCI_16KB0_CCREGS_OFFSET))
+#define CCREGS_FAST(si) (((char *)((si)->curmap) + PCI_16KB0_CCREGS_OFFSET))
 
 /*
  * Macros to disable/restore function core(D11, ENET, ILINE20, etc) interrupts before/
  * after core switching to avoid invalid register accesss inside ISR.
  */
 #define INTR_OFF(si, intr_val) \
-	if ((si)->intrsoff_fn && (cores_info)->coreid[(si)->curidx] == (si)->dev_coreid) {	\
+	if ((si)->intrsoff_fn && (si)->coreid[(si)->curidx] == (si)->dev_coreid) {	\
 		intr_val = (*(si)->intrsoff_fn)((si)->intr_arg); }
 #define INTR_RESTORE(si, intr_val) \
-	if ((si)->intrsrestore_fn && (cores_info)->coreid[(si)->curidx] == (si)->dev_coreid) {	\
+	if ((si)->intrsrestore_fn && (si)->coreid[(si)->curidx] == (si)->dev_coreid) {	\
 		(*(si)->intrsrestore_fn)((si)->intr_arg, intr_val); }
 
 /* dynamic clock control defines */
@@ -203,7 +172,6 @@ extern void sb_setint(si_t *sih, int siflag);
 extern uint sb_corevendor(si_t *sih);
 extern uint sb_corerev(si_t *sih);
 extern uint sb_corereg(si_t *sih, uint coreidx, uint regoff, uint mask, uint val);
-extern uint32 *sb_corereg_addr(si_t *sih, uint coreidx, uint regoff);
 extern bool sb_iscoreup(si_t *sih);
 extern void *sb_setcoreidx(si_t *sih, uint coreidx);
 extern uint32 sb_core_cflags(si_t *sih, uint32 mask, uint32 val);
@@ -226,9 +194,9 @@ extern bool sb_taclear(si_t *sih, bool details);
 extern void sb_view(si_t *sih, bool verbose);
 extern void sb_viewall(si_t *sih, bool verbose);
 #endif
-#if defined(BCMDBG) || defined(BCMDBG_PHYDUMP)
+#if defined(BCMDBG)
 extern void sb_dumpregs(si_t *sih, struct bcmstrbuf *b);
-#endif 
+#endif
 
 /* Wake-on-wireless-LAN (WOWL) */
 extern bool sb_pci_pmecap(si_t *sih);
@@ -245,12 +213,10 @@ extern si_t *ai_kattach(osl_t *osh);
 extern void ai_scan(si_t *sih, void *regs, uint devid);
 
 extern uint ai_flag(si_t *sih);
-extern uint ai_flag_alt(si_t *sih);
 extern void ai_setint(si_t *sih, int siflag);
 extern uint ai_coreidx(si_t *sih);
 extern uint ai_corevendor(si_t *sih);
 extern uint ai_corerev(si_t *sih);
-extern uint32 *ai_corereg_addr(si_t *sih, uint coreidx, uint regoff);
 extern bool ai_iscoreup(si_t *sih);
 extern void *ai_setcoreidx(si_t *sih, uint coreidx);
 extern uint32 ai_core_cflags(si_t *sih, uint32 mask, uint32 val);
@@ -258,34 +224,52 @@ extern void ai_core_cflags_wo(si_t *sih, uint32 mask, uint32 val);
 extern uint32 ai_core_sflags(si_t *sih, uint32 mask, uint32 val);
 extern uint ai_corereg(si_t *sih, uint coreidx, uint regoff, uint mask, uint val);
 extern void ai_core_reset(si_t *sih, uint32 bits, uint32 resetbits);
-extern void ai_d11rsdb_core_reset(si_t *sih, uint32 bits,
-	uint32 resetbits, void *p, void *s);
-extern void ai_d11rsdb_core1_alt_reg_clk_en(si_t *sih);
-extern void ai_d11rsdb_core1_alt_reg_clk_dis(si_t *sih);
-
 extern void ai_core_disable(si_t *sih, uint32 bits);
-extern void ai_d11rsdb_core_disable(const si_info_t *sii, uint32 bits,
-	aidmp_t *pmacai, aidmp_t *smacai);
 extern int ai_numaddrspaces(si_t *sih);
 extern uint32 ai_addrspace(si_t *sih, uint asidx);
 extern uint32 ai_addrspacesize(si_t *sih, uint asidx);
 extern void ai_coreaddrspaceX(si_t *sih, uint asidx, uint32 *addr, uint32 *size);
 extern uint ai_wrap_reg(si_t *sih, uint32 offset, uint32 mask, uint32 val);
-extern void ai_enable_backplane_timeouts(si_t *sih);
-extern void ai_clear_backplane_to(si_t *sih);
 
 #ifdef BCMDBG
 extern void ai_view(si_t *sih, bool verbose);
 extern void ai_viewall(si_t *sih, bool verbose);
 #endif
-#if defined(BCMDBG) || defined(BCMDBG_PHYDUMP)
+#if defined(BCMDBG)
 extern void ai_dumpregs(si_t *sih, struct bcmstrbuf *b);
-#endif 
+#endif
 
 #ifdef SI_ENUM_BASE_VARIABLE
 extern void si_enum_base_init(si_t *sih, uint bustype);
 #endif /* SI_ENUM_BASE_VARIABLE */
 
+#if defined(DSLCPE) 
+/* UBUS Interconnect exported externs */
+#if defined (DSLCPE_WOC)
+extern void ub_scan(si_t *sih, void *regs, uint devid);
+extern uint ub_flag(si_t *sih);
+extern void ub_setint(si_t *sih, int siflag);
+extern uint ub_coreidx(si_t *sih);
+extern uint ub_corevendor(si_t *sih);
+extern uint ub_corerev(si_t *sih);
+extern bool ub_iscoreup(si_t *sih);
+extern void *ub_setcoreidx(si_t *sih, uint coreidx);
+extern uint32 ub_core_cflags(si_t *sih, uint32 mask, uint32 val);
+extern void ub_core_cflags_wo(si_t *sih, uint32 mask, uint32 val);
+extern uint32 ub_core_sflags(si_t *sih, uint32 mask, uint32 val);
+extern uint ub_corereg(si_t *sih, uint coreidx, uint regoff, uint mask, uint val);
+extern void ub_core_reset(si_t *sih, uint32 bits, uint32 resetbits);
+extern void ub_core_disable(si_t *sih, uint32 bits);
+extern int ub_numaddrspaces(si_t *sih);
+extern uint32 ub_addrspace(si_t *sih, uint asidx);
+extern uint32 ub_addrspacesize(si_t *sih, uint asidx);
+#ifdef BCMDBG
+extern void ub_view(si_t *sih, bool verbose);
+#endif
+#if defined(BCMDBG) || defined(BCMDBG_DUMP)
+extern void ub_dumpregs(si_t *sih, struct bcmstrbuf *b);
+#endif
+#else
 #define ub_scan(a, b, c) do {} while (0)
 #define ub_flag(a) (0)
 #define ub_setint(a, b) do {} while (0)
@@ -305,5 +289,6 @@ extern void si_enum_base_init(si_t *sih, uint bustype);
 #define ub_addrspacesize(a, b) (0)
 #define ub_view(a, b) do {} while (0)
 #define ub_dumpregs(a, b) do {} while (0)
-
+#endif /* DSLCPE_WOC */
+#endif /* DSLCPE */
 #endif	/* _siutils_priv_h_ */

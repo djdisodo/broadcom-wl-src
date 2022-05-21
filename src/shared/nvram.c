@@ -1,7 +1,7 @@
 /*
  * NVRAM variable manipulation (common)
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,21 +26,6 @@
 #include <bcmendian.h>
 #include <bcmnvram.h>
 #include <sbsdram.h>
-
-extern void *MMALLOC(size_t size);
-extern void MMFREE(void *addr);
-
-#ifdef MAX_NVRAM_SPACE
-// nothign
-
-#elif defined(NVRAM_SPACE_256)
-#define MAX_NVRAM_SPACE NVRAMSIZEREAL
-#define DEF_NVRAM_SPACE NVRAMSIZEREAL
-extern int NVRAMSIZEREAL;
-#else
-#define NVRAMSIZEREAL NVRAM_SPACE
-#define MAX_NVRAM_SPACE NVRAM_SPACE
-#endif
 
 extern struct nvram_tuple *_nvram_realloc(struct nvram_tuple *t, const char *name,
                                           const char *value);
@@ -98,19 +83,20 @@ hash(const char *s)
 	return hashval;
 }
 
-static unsigned long nvram_space = MAX_NVRAM_SPACE;
 /* (Re)initialize the hash table. Should be locked. */
 static int
 BCMINITFN(nvram_rehash)(struct nvram_header *header)
 {
 	char buf[] = "0xXXXXXXXX", *name, *value, *end, *eq;
 	char *nvram_space_str = _nvram_get("nvram_space");
-	unsigned long nvram_space_new;
+	unsigned long nvram_space = DEF_NVRAM_SPACE;
+
 	if (nvram_space_str)
 		nvram_space =  bcm_strtoul(nvram_space_str, NULL, 0);
 
 	if (nvram_space < DEF_NVRAM_SPACE)
 		nvram_space = DEF_NVRAM_SPACE;
+
 	/* (Re)initialize hash table */
 	nvram_free();
 
@@ -126,16 +112,7 @@ BCMINITFN(nvram_rehash)(struct nvram_header *header)
 		_nvram_set(name, value);
 		*eq = '=';
 	}
-		
-	nvram_space_str = _nvram_get("nvram_space");
-	if (nvram_space_str) {
-		nvram_space_new =  bcm_strtoul(nvram_space_str, NULL, 0);
-		if (nvram_space_new < nvram_space) {
-		    nvram_space = nvram_space_new;
-		    nvram_rehash(header);
-		}
-	}	
-	
+
 	/* Set special SDRAM parameters */
 	if (!_nvram_get("sdram_init")) {
 		sprintf(buf, "0x%04X", (uint16)(header->crc_ver_init >> 16));
@@ -281,6 +258,7 @@ BCMINITFN(_nvram_commit)(struct nvram_header *header)
 
 	if (nvram_space < DEF_NVRAM_SPACE)
 		nvram_space = DEF_NVRAM_SPACE;
+
 	/* Regenerate header */
 	header->magic = NVRAM_MAGIC;
 	header->crc_ver_init = (NVRAM_VERSION << 8);
@@ -334,9 +312,9 @@ BCMINITFN(_nvram_init)(void *sih)
 {
 	struct nvram_header *header;
 	int ret;
-	printk(KERN_INFO "max nvram space = %d\n",MAX_NVRAM_SPACE);
 
-	if (!(header = (struct nvram_header *) MMALLOC(MAX_NVRAM_SPACE))) {
+
+	if (!(header = (struct nvram_header *) MALLOC(si_osh(sih), MAX_NVRAM_SPACE))) {
 		printf("nvram_init: out of memory\n");
 		return -12; /* -ENOMEM */
 	}
@@ -345,7 +323,7 @@ BCMINITFN(_nvram_init)(void *sih)
 	    header->magic == NVRAM_MAGIC)
 		nvram_rehash(header);
 
-	MMFREE(header);
+	MFREE(si_osh(sih), header, MAX_NVRAM_SPACE);
 	return ret;
 }
 

@@ -1,7 +1,7 @@
 /*
  * Stubs for NVRAM functions for platforms without flash
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: nvramstubs.c 542540 2015-03-20 04:44:40Z $
+ * $Id: nvramstubs.c 300516 2011-12-04 17:39:44Z $
  */
 
 #include <bcm_cfg.h>
@@ -28,58 +28,35 @@
 int
 nvram_init(void *sih)
 {
-	BCM_REFERENCE(sih);
-
 	return 0;
 }
-
-#if defined(_CFE_) && defined(BCM_DEVINFO)
-int
-devinfo_nvram_init(void *sih)
-{
-	BCM_REFERENCE(sih);
-
-	return 0;
-}
-#endif
 
 int
 nvram_append(void *sb, char *vars, uint varsz)
 {
-	BCM_REFERENCE(sb);
-	BCM_REFERENCE(vars);
-	BCM_REFERENCE(varsz);
-
 	return 0;
 }
 
 void
 nvram_exit(void *sih)
 {
-	BCM_REFERENCE(sih);
 }
 
 char *
 nvram_get(const char *name)
 {
-	BCM_REFERENCE(name);
-
 	return (char *) 0;
 }
 
 int
 nvram_set(const char *name, const char *value)
 {
-	BCM_REFERENCE(name);
-	BCM_REFERENCE(value);
 	return 0;
 }
 
 int
 nvram_unset(const char *name)
 {
-	BCM_REFERENCE(name);
-
 	return 0;
 }
 

@@ -1,7 +1,7 @@
 /*
  * Description.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,7 +14,7 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- * $Id: miniopt.c 467150 2014-04-02 17:30:43Z $
+ * $Id: miniopt.c 300516 2011-12-04 17:39:44Z $
  */
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -100,7 +100,7 @@ miniopt(miniopt_t *t, char **argv)
 			err = 1;
 			goto exit;
 		}
-		keylen = eq ? (int)(eq - (p + 2)) : (int)strlen(p) - 2;
+		keylen = eq ? (eq - (p + 2)) : (int)strlen(p) - 2;
 		if (keylen > 63) keylen = 63;
 		memcpy(t->key, p + 2, keylen);
 

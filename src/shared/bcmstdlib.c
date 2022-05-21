@@ -1,7 +1,7 @@
 /*
  * stdlib support routines for self-contained images.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmstdlib.c 549681 2015-04-16 17:18:30Z $
+ * $Id: bcmstdlib.c 355155 2012-09-05 17:00:22Z $
  */
 
 /*
@@ -25,10 +25,11 @@
 */
 
 #include <typedefs.h>
-#if defined(NDIS) || defined(_MINOSL_) || defined(PCBIOS) || defined(EFI)
+#if defined(NDIS) || defined(_MINOSL_) || defined(__vxworks) || defined(PCBIOS) || \
+	defined(EFI) || defined(DSLCPE)
 /* debatable */
 #include <osl.h>
-#else
+#elif 1
 #include <stdio.h>
 #endif 
 
@@ -42,9 +43,9 @@
 /*
  * Define BCMSTDLIB_SNPRINTF_ONLY if we only want snprintf & vsnprintf implementations
  */
-#if (defined(_WIN32) && !defined(EFI)) || defined(_CFE_)
+#if (defined(_WIN32) && !defined(EFI)) || defined(__vxworks) || defined(_CFE_) || defined(DSLCPE)
 #define BCMSTDLIB_SNPRINTF_ONLY 1
-#endif /* _WIN32 || !EFI || _CFE_ */
+#endif 
 
 #include <stdarg.h>
 #include <bcmstdlib.h>
@@ -55,81 +56,6 @@
 #ifdef MSGTRACE
 #include <msgtrace.h>
 #endif
-
-#ifdef HND_PRINTF_THREAD_SAFE
-#include <osl.h>
-#include <osl_ext.h>
-#include <bcmstdlib_ext.h>
-
-/* mutex macros for thread safe */
-#define HND_PRINTF_MUTEX_DECL(mutex)		static OSL_EXT_MUTEX_DECL(mutex)
-#define HND_PRINTF_MUTEX_CREATE(name, mutex)	osl_ext_mutex_create(name, mutex)
-#define HND_PRINTF_MUTEX_DELETE(mutex)		osl_ext_mutex_delete(mutex)
-#define HND_PRINTF_MUTEX_ACQUIRE(mutex, msec)	osl_ext_mutex_acquire(mutex, msec)
-#define HND_PRINTF_MUTEX_RELEASE(mutex)	osl_ext_mutex_release(mutex)
-
-HND_PRINTF_MUTEX_DECL(printf_mutex);
-int in_isr_handler = 0, in_trap_handler = 0, in_fiq_handler = 0;
-
-bool
-printf_lock_init(void)
-{
-	/* create mutex for critical section locking */
-	if (HND_PRINTF_MUTEX_CREATE("printf_mutex", &printf_mutex) != OSL_EXT_SUCCESS)
-		return FALSE;
-	return TRUE;
-}
-
-bool
-printf_lock_cleanup(void)
-{
-	/* create mutex for critical section locking */
-	if (HND_PRINTF_MUTEX_DELETE(&printf_mutex) != OSL_EXT_SUCCESS)
-		return FALSE;
-	return TRUE;
-}
-
-/* returns TRUE if allowed to proceed, FALSE to discard.
-* printf from isr hook or fiq hook is not allowed due to IRQ_MODE and FIQ_MODE stack size
-* limitation. For instruction on this, check:
-* http://hwnbu-twiki.sj.broadcom.com/bin/view/Mwgroup/ThreadXPort#printf.
-*/
-static bool
-printf_lock(void)
-{
-
-	/* discard for irq or fiq context, we need to keep irq/fiq stack small. */
-	if (in_isr_handler || in_fiq_handler)
-		return FALSE;
-
-	/* allow printf in trap handler, proceed without mutex. */
-	if (in_trap_handler)
-		return TRUE;
-
-	/* if not in isr or trap, then go thread-protection with mutex. */
-	if (HND_PRINTF_MUTEX_ACQUIRE(&printf_mutex, OSL_EXT_TIME_FOREVER) != OSL_EXT_SUCCESS)
-		return FALSE;
-	else
-		return TRUE;
-}
-
-static void
-printf_unlock(void)
-{
-	if (in_isr_handler || in_fiq_handler)
-		return;
-
-	if (in_trap_handler)
-		return;
-
-	if (HND_PRINTF_MUTEX_RELEASE(&printf_mutex) != OSL_EXT_SUCCESS)
-		return;
-}
-
-#else
-#define printf_lock() (TRUE)
-#define printf_unlock()
-#endif	/* HND_PRINTF_THREAD_SAFE */
 
 #ifdef BCMSTDLIB_WIN32_APP
 
@@ -164,8 +90,6 @@ snprintf(char *buf, size_t bufsize, const char *fmt, ...)
 }
 
 #else /* BCMSTDLIB_WIN32_APP */
-
-#if !defined(BCMROMOFFLOAD_EXCLUDE_STDLIB_FUNCS)
 
 static const char hex_upper[17] = "0123456789ABCDEF";
 static const char hex_lower[17] = "0123456789abcdef";
@@ -207,13 +131,15 @@ __atox(char *buf, char * end, unsigned int num, unsigned int radix, int width,
 }
 
 int
-vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
+BCMROMFN(vsnprintf)(char *buf, size_t size, const char *fmt, va_list ap)
 {
 	char *optr;
 	char *end;
 	const char *iptr, *tmpptr;
 	unsigned int x;
 	int i;
+	int leadingzero;
+	int leadingnegsign;
 	int islong;
 	int width;
 	int width2 = 0;
@@ -243,9 +169,16 @@ vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 			hashash = 1;
 			iptr++;
 		}
-		if (*iptr == '-' || *iptr == '0') {
+		if (*iptr == '-') {
+			leadingnegsign = 1;
 			iptr++;
-		}
+		} else
+			leadingnegsign = 0;
+
+		if (*iptr == '0')
+			leadingzero = 1;
+		else
+			leadingzero = 0;
 
 		width = 0;
 		while (*iptr && bcm_isdigit(*iptr)) {
@@ -315,10 +248,6 @@ vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 			break;
 		case 'X':
 		case 'x':
-			if (hashash) {
-				*optr++ = '0';
-				*optr++ = *iptr;
-			}
 			x = va_arg(ap, unsigned int);
 			optr += __atox(optr, end, x, 16, width,
 			               (*iptr == 'X') ? hex_upper : hex_lower);
@@ -356,7 +285,7 @@ vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 
 
 int
-snprintf(char *buf, size_t bufsize, const char *fmt, ...)
+BCMROMFN(snprintf)(char *buf, size_t bufsize, const char *fmt, ...)
 {
 	va_list		ap;
 	int			r;
@@ -367,7 +296,6 @@ snprintf(char *buf, size_t bufsize, const char *fmt, ...)
 
 	return r;
 }
-#endif	/* !BCMROMOFFLOAD_EXCLUDE_STDLIB_FUNCS */
 
 #endif /* BCMSTDLIB_WIN32_APP */
 
@@ -375,14 +303,14 @@ snprintf(char *buf, size_t bufsize, const char *fmt, ...)
 
 
 int
-vsprintf(char *buf, const char *fmt, va_list ap)
+BCMROMFN(vsprintf)(char *buf, const char *fmt, va_list ap)
 {
 	return (vsnprintf(buf, INT_MAX, fmt, ap));
 }
 
 
 int
-sprintf(char *buf, const char *fmt, ...)
+BCMROMFN(sprintf)(char *buf, const char *fmt, ...)
 {
 	va_list ap;
 	int count;
@@ -396,7 +324,7 @@ sprintf(char *buf, const char *fmt, ...)
 
 
 void *
-memmove(void *dest, const void *src, size_t n)
+BCMROMFN(memmove)(void *dest, const void *src, size_t n)
 {
 	/* only use memcpy if there is no overlap. otherwise copy each byte in a safe sequence */
 	if (((const char *)src >= (char *)dest + n) || ((const char *)src + n <= (char *)dest)) {
@@ -425,7 +353,7 @@ memmove(void *dest, const void *src, size_t n)
 
 #ifndef EFI
 int
-memcmp(const void *s1, const void *s2, size_t n)
+BCMROMFN(memcmp)(const void *s1, const void *s2, size_t n)
 {
 	const unsigned char *ss1;
 	const unsigned char *ss2;
@@ -448,7 +376,7 @@ memcmp(const void *s1, const void *s2, size_t n)
 
 /* Skip over functions that are being used from DriverLibrary to save space */
 char *
-strcpy(char *dest, const char *src)
+BCMROMFN(strcpy)(char *dest, const char *src)
 {
 	char *ptr = dest;
 
@@ -459,7 +387,7 @@ strcpy(char *dest, const char *src)
 }
 
 char *
-strncpy(char *dest, const char *src, size_t n)
+BCMROMFN(strncpy)(char *dest, const char *src, size_t n)
 {
 	char *endp;
 	char *p;
@@ -478,7 +406,7 @@ strncpy(char *dest, const char *src, size_t n)
 }
 
 size_t
-strlen(const char *s)
+BCMROMFN(strlen)(const char *s)
 {
 	size_t n = 0;
 
@@ -491,7 +419,7 @@ strlen(const char *s)
 }
 
 int
-strcmp(const char *s1, const char *s2)
+BCMROMFN(strcmp)(const char *s1, const char *s2)
 {
 	while (*s2 && *s1) {
 		if (*s1 < *s2)
@@ -511,7 +439,7 @@ strcmp(const char *s1, const char *s2)
 #endif /* EFI */
 
 int
-strncmp(const char *s1, const char *s2, size_t n)
+BCMROMFN(strncmp)(const char *s1, const char *s2, size_t n)
 {
 	while (*s2 && *s1 && n) {
 		if (*s1 < *s2)
@@ -533,7 +461,7 @@ strncmp(const char *s1, const char *s2, size_t n)
 }
 
 char *
-strchr(const char *str, int c)
+BCMROMFN(strchr)(const char *str, int c)
 {
 	const char *x = str;
 
@@ -546,7 +474,7 @@ strchr(const char *str, int c)
 }
 
 char *
-strrchr(const char *str, int c)
+BCMROMFN(strrchr)(const char *str, int c)
 {
 	const char *save = NULL;
 
@@ -561,7 +489,7 @@ strrchr(const char *str, int c)
 /* Skip over functions that are being used from DriverLibrary to save space */
 #ifndef EFI
 char *
-strcat(char *d, const char *s)
+BCMROMFN(strcat)(char *d, const char *s)
 {
 	strcpy(&d[strlen(d)], s);
 	return (d);
@@ -571,7 +499,7 @@ strcat(char *d, const char *s)
 /* Skip over functions that are being used from DriverLibrary to save space */
 #ifndef EFI
 char *
-strstr(const char *s, const char *substr)
+BCMROMFN(strstr)(const char *s, const char *substr)
 {
 	int substr_len = strlen(substr);
 
@@ -584,7 +512,7 @@ strstr(const char *s, const char *substr)
 #endif /* EFI */
 
 size_t
-strspn(const char *s, const char *accept)
+BCMROMFN(strspn)(const char *s, const char *accept)
 {
 	uint count = 0;
 
@@ -595,7 +523,7 @@ strspn(const char *s, const char *accept)
 }
 
 size_t
-strcspn(const char *s, const char *reject)
+BCMROMFN(strcspn)(const char *s, const char *reject)
 {
 	uint count = 0;
 
@@ -606,7 +534,7 @@ strcspn(const char *s, const char *reject)
 }
 
 void *
-memchr(const void *s, int c, size_t n)
+BCMROMFN(memchr)(const void *s, int c, size_t n)
 {
 	if (n != 0) {
 		const unsigned char *ptr = s;
@@ -622,7 +550,7 @@ memchr(const void *s, int c, size_t n)
 }
 
 unsigned long
-strtoul(const char *cp, char **endp, int base)
+BCMROMFN(strtoul)(const char *cp, char **endp, int base)
 {
 	ulong result, value;
 	bool minus;
@@ -676,8 +604,7 @@ strtoul(const char *cp, char **endp, int base)
 /* memset is not in ROM offload because it is used directly by the compiler in
  * structure assignments/character array initialization with "".
  */
-
-void * BCMSPEEDOPT
+void *
 memset(void *dest, int c, size_t n)
 {
 	uint32 w, *dw;
@@ -744,10 +671,18 @@ memcpy(void *dest, const void *src, size_t n)
 		if (n >= 32) {
 			const uint32 *sfinal = (const uint32 *)((const uint8 *)sw + (n & ~31));
 
-			asm volatile("\n1:\t"
-				     "ldmia.w\t%0!, {%3, %4, %5, %6, %7, %8, %9, %10}\n\t"
-				     "stmia.w\t%1!, {%3, %4, %5, %6, %7, %8, %9, %10}\n\t"
-				     "cmp\t%2, %0\n\t"
+			/* Note: order of '%' registers is chosen to avoid assembler warnings,
+			 * and may need to be reordered if function or compiler is changed.
+			 */
+			asm volatile("1:\n\t"
+#if (__GNUC_MINOR__ >= 5)	    /* arm-none-eabi-gcc 4.5.1 (2010.09) */
+				     "ldmia.w %0!, {%3, %4, %5, %6, %8, %9, %10, %7}\n\t"
+				     "stmia.w %1!, {%3, %4, %5, %6, %8, %9, %10, %7}\n\t"
+#else				/* arm-none-eabi-gcc 4.2.1 (2007q3-53) */
+				     "ldmia.w %0!, {%8, %9, %10, %7, %6, %5, %3, %4}\n\t"
+				     "stmia.w %1!, {%8, %9, %10, %7, %6, %5, %3, %4}\n\t"
+#endif
+				     "cmp %2, %0\n\t"
 				     "bhi.n\t1b\n\t"
 				     : "=r" (sw), "=r" (dw), "=r" (sfinal), "=r" (t1), "=r" (t2),
 				     "=r" (t3), "=r" (t4), "=r" (t5), "=r" (t6), "=r" (t7),
@@ -762,60 +697,78 @@ memcpy(void *dest, const void *src, size_t n)
 		case 0:
 			break;
 		case 1:
-			asm volatile("ldr\t%2, [%0]\n\t"
-			             "str\t%2, [%1]\n\t"
-			             "adds\t%0, #4\n\t"
-			             "adds\t%1, #4\n\t"
+			asm volatile("ldr %2, [%0]\n\t"
+			             "str %2, [%1]\n\t"
+			             "adds %0, #4\n\t"
+			             "adds %1, #4\n\t"
 			             : "=r" (sw), "=r" (dw), "=r" (t1)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 2:
-			asm volatile("ldmia.w\t%0!, {%2, %3}\n\t"
-			             "stmia.w\t%1!, {%2, %3}\n\t"
+			asm volatile("ldmia.w %0!, {%2, %3}\n\t"
+			             "stmia.w %1!, {%2, %3}\n\t"
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 3:
-			asm volatile("ldmia.w\t%0!, {%2, %3, %4}\n\t"
-			             "stmia.w\t%1!, {%2, %3, %4}\n\t"
+			asm volatile("ldmia.w %0!, {%2, %3, %4}\n\t"
+			             "stmia.w %1!, {%2, %3, %4}\n\t"
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2),
 			             "=r" (t3)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 4:
-			asm volatile("ldmia.w\t%0!, {%2, %3, %4, %5}\n\t"
-			             "stmia.w\t%1!, {%2, %3, %4, %5}\n\t"
+			asm volatile("ldmia.w %0!, {%2, %3, %4, %5}\n\t"
+			             "stmia.w %1!, {%2, %3, %4, %5}\n\t"
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2),
 			             "=r" (t3), "=r" (t4)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 5:
 			asm volatile(
-				     "ldmia.w\t%0!, {%2, %3, %4, %5, %6}\n\t"
-			             "stmia.w\t%1!, {%2, %3, %4, %5, %6}\n\t"
+#if (__GNUC_MINOR__ >= 5)
+				     "ldmia.w %0!, {%2, %3, %4, %5, %6}\n\t"
+			             "stmia.w %1!, {%2, %3, %4, %5, %6}\n\t"
+#else
+				     "ldmia.w %0!, {%3, %4, %5, %6, %2}\n\t"
+			             "stmia.w %1!, {%3, %4, %5, %6, %2}\n\t"
+#endif
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2),
 			             "=r" (t3), "=r" (t4), "=r" (t5)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 6:
 			asm volatile(
-				     "ldmia.w\t%0!, {%2, %3, %4, %5, %6, %7}\n\t"
-			             "stmia.w\t%1!, {%2, %3, %4, %5, %6, %7}\n\t"
+#if (__GNUC_MINOR__ >= 5)
+				     "ldmia.w %0!, {%2, %3, %4, %5, %6, %7}\n\t"
+			             "stmia.w %1!, {%2, %3, %4, %5, %6, %7}\n\t"
+#else
+				     "ldmia.w %0!, {%4, %5, %6, %7, %3, %2}\n\t"
+			             "stmia.w %1!, {%4, %5, %6, %7, %3, %2}\n\t"
+#endif
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2),
 			             "=r" (t3), "=r" (t4), "=r" (t5), "=r" (t6)
 			             : "0" (sw), "1" (dw));
 			break;
 		case 7:
 			asm volatile(
-				     "ldmia.w\t%0!, {%2, %3, %4, %5, %6, %8, %7}\n\t"
-			             "stmia.w\t%1!, {%2, %3, %4, %5, %6, %8, %7}\n\t"
+#if (__GNUC_MINOR__ >= 5)
+				     "ldmia.w %0!, {%2, %3, %4, %5, %6, %8, %7}\n\t"
+			             "stmia.w %1!, {%2, %3, %4, %5, %6, %8, %7}\n\t"
+#else
+				     "ldmia.w %0!, {%5, %6, %7, %8, %4, %3, %2}\n\t"
+			             "stmia.w %1!, {%5, %6, %7, %8, %4, %3, %2}\n\t"
+#endif
 			             : "=r" (sw), "=r" (dw), "=r" (t1), "=r" (t2),
 			             "=r" (t3), "=r" (t4), "=r" (t5), "=r" (t6),
 			             "=r" (t7)
 			             : "0" (sw), "1" (dw));
 			break;
 		default:
-			ASSERT(0);
+			i = n / 4;
+			while (i--) {
+				*dw++ = *sw++;
+			}
 			break;
 		}
 		n = n % 4;
@@ -866,12 +819,13 @@ memcpy(void *dest, const void *src, size_t n)
 
 	return dest;
 }
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7R__) */
+#endif /* __ARM_ARCH_7M__ */
 
 #endif /* EFI */
 
 /* Include printf if it has already not been defined as NULL */
 #ifndef printf
+
 int
 printf(const char *fmt, ...)
 {
@@ -879,19 +833,9 @@ printf(const char *fmt, ...)
 	int count = 0, i;
 	char buffer[PRINTF_BUFLEN + 1];
 
-	if (!printf_lock())
-		return 0;
-
-#ifdef DONGLEBUILD
-	{
-		/* add the dongle ref time */
-		uint32 dongle_time_ms = hnd_get_reftime_ms();
-		count = sprintf(buffer, "%06u.%03u ", dongle_time_ms / 1000, dongle_time_ms % 1000);
-	}
-#endif /* DONGLEBUILD */
 
 	va_start(ap, fmt);
-	count += vsnprintf(buffer + count, sizeof(buffer) - count, fmt, ap);
+	count += vsnprintf(buffer, sizeof(buffer), fmt, ap);
 	va_end(ap);
 
 	for (i = 0; i < count; i++) {
@@ -903,11 +847,10 @@ printf(const char *fmt, ...)
 #endif
 	}
 
+
 #ifdef MSGTRACE
 	msgtrace_put(buffer, count);
 #endif
-
-	printf_unlock();
 
 	return count;
 }
@@ -919,8 +862,6 @@ int
 fputs(const char *s, FILE *stream /* UNUSED */)
 {
 	char c;
-
-	UNUSED_PARAMETER(stream);
 	while ((c = *s++))
 		putchar(c);
 	return 0;
@@ -937,7 +878,6 @@ puts(const char *s)
 int
 fputc(int c, FILE *stream /* UNUSED */)
 {
-	UNUSED_PARAMETER(stream);
 	putc(c);
 	return (int)(unsigned char)c;
 }
@@ -957,5 +897,5 @@ rand(void)
 	seed = t;
 	return t;
 }
-#endif /* !_WIN32 && !_CFE_ && !EFI */
+#endif 
 #endif /* BCMSTDLIB_SNPRINTF_ONLY */

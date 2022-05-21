@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,27 +20,30 @@
 #ifndef _epivers_h_
 #define _epivers_h_
 
-#define	EPI_MAJOR_VERSION	7
+#define	EPI_MAJOR_VERSION	6
 
-#define	EPI_MINOR_VERSION	14
+#define	EPI_MINOR_VERSION	30
 
-#define	EPI_RC_NUMBER		89
+#define	EPI_RC_NUMBER		163
 
-#define	EPI_INCREMENTAL_NUMBER	21
+#define	EPI_INCREMENTAL_NUMBER	23
 
 #define	EPI_BUILD_NUMBER	0
 
-#define	EPI_VERSION		7, 14, 89, 21
+#define	EPI_VERSION		6, 30, 163, 23
 
-#define	EPI_VERSION_NUM		0x070e5915
+#define	EPI_VERSION_NUM		0x061ea317
 
-#define EPI_VERSION_DEV		7.14.89
+#define EPI_VERSION_DEV		6.30.163
 
 /* Driver Version String, ASCII, 32 chars max */
-#ifdef WLTEST
-#define	EPI_VERSION_STR		"7.14.89.21 (r524987 WLTEST)"
+#ifdef DSLCPE
+#define	EPI_VERSION_STR		DSLCPE_WLAN_VERSION
 #else
-#define	EPI_VERSION_STR		"7.14.89.21 (r524987)"
+#ifdef WLTEST
+#define	EPI_VERSION_STR		"6.30.163.23 (r382482 WLTEST)"
+#else
+#define	EPI_VERSION_STR		"6.30.163.23 (r382482)"
 #endif
-
+#endif
 #endif /* _epivers_h_ */

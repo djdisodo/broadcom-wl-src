@@ -2,7 +2,7 @@
  * Generic Broadcom Home Networking Division (HND) DMA engine HW interface
  * This supports the following chips: BCM42xx, 44xx, 47xx .
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: sbhnddma.h 534407 2015-02-13 07:04:36Z $
+ * $Id: sbhnddma.h 345316 2012-07-17 17:46:04Z $
  */
 
 #ifndef	_sbhnddma_h_
@@ -74,7 +74,7 @@ typedef volatile struct {
 #define	XC_SE		((uint32)1 << 1)	/* transmit suspend request */
 #define	XC_LE		((uint32)1 << 2)	/* loopback enable */
 #define	XC_FL		((uint32)1 << 4)	/* flush request */
-#define XC_MR_MASK	0x000001C0		/* Multiple outstanding reads */
+#define XC_MR_MASK	0x000000C0		/* Multiple outstanding reads */
 #define XC_MR_SHIFT	6
 #define	XC_PD		((uint32)1 << 11)	/* parity check disable */
 #define	XC_AE		((uint32)3 << 16)	/* address extension bits */
@@ -89,12 +89,7 @@ typedef volatile struct {
 /* Multiple outstanding reads */
 #define DMA_MR_1	0
 #define DMA_MR_2	1
-#define DMA_MR_4	2
-#define DMA_MR_8	3
-#define DMA_MR_12	4
-#define DMA_MR_16	5
-#define DMA_MR_20	6
-#define DMA_MR_32	7
+/* 2, 3: reserved */
 
 /* DMA Burst Length in bytes */
 #define DMA_BL_16	0
@@ -156,8 +151,7 @@ typedef volatile struct {
 #define RC_PC_SHIFT	21
 #define RC_PT_MASK	0x03000000		/* Prefetch threshold */
 #define RC_PT_SHIFT	24
-#define RC_WAITCMP_MASK 0x00001000
-#define RC_WAITCMP_SHIFT 12
+
 /* receive descriptor table pointer */
 #define	RP_LD_MASK	0xfff			/* last valid descriptor */
 
@@ -279,7 +273,7 @@ typedef volatile struct {
 #define	D64_XC_SE		0x00000002	/* transmit suspend request */
 #define	D64_XC_LE		0x00000004	/* loopback enable */
 #define	D64_XC_FL		0x00000010	/* flush request */
-#define D64_XC_MR_MASK		0x000001C0	/* Multiple outstanding reads */
+#define D64_XC_MR_MASK		0x000000C0	/* Multiple outstanding reads */
 #define D64_XC_MR_SHIFT		6
 #define	D64_XC_PD		0x00000800	/* parity check disable */
 #define	D64_XC_AE		0x00030000	/* address extension bits */
@@ -320,10 +314,8 @@ typedef volatile struct {
 #define	D64_RC_RO_SHIFT		1
 #define	D64_RC_FM		0x00000100	/* direct fifo receive (pio) mode */
 #define	D64_RC_SH		0x00000200	/* separate rx header descriptor enable */
-#define	D64_RC_SHIFT		9	/* separate rx header descriptor enable */
 #define	D64_RC_OC		0x00000400	/* overflow continue */
 #define	D64_RC_PD		0x00000800	/* parity check disable */
-#define D64_RC_SA		0x00002000	/* select active */
 #define D64_RC_GE		0x00004000	/* Glom enable */
 #define	D64_RC_AE		0x00030000	/* address extension bits */
 #define	D64_RC_AE_SHIFT		16
@@ -333,8 +325,6 @@ typedef volatile struct {
 #define D64_RC_PC_SHIFT		21
 #define D64_RC_PT_MASK		0x03000000	/* Prefetch threshold */
 #define D64_RC_PT_SHIFT		24
-#define D64_RC_WAITCMP_MASK	0x00001000
-#define D64_RC_WAITCMP_SHIFT	12
 
 /* flags for dma controller */
 #define DMA_CTRL_PEN		(1 << 0)	/* partity enable */
@@ -343,8 +333,6 @@ typedef volatile struct {
 #define DMA_CTRL_UNFRAMED	(1 << 3)	/* Unframed Rx/Tx data */
 #define DMA_CTRL_USB_BOUNDRY4KB_WAR (1 << 4)
 #define DMA_CTRL_DMA_AVOIDANCE_WAR (1 << 5)	/* DMA avoidance WAR for 4331 */
-#define DMA_CTRL_RXSINGLE	(1 << 6)	/* always single buffer */
-#define DMA_CTRL_SDIO_RXGLOM	(1 << 7)	/* DMA Rx glome is enabled */
 
 /* receive descriptor table pointer */
 #define	D64_RP_LD_MASK		0x00001fff	/* last valid descriptor */
@@ -386,7 +374,6 @@ typedef volatile struct {
 
 /* descriptor control flags 1 */
 #define D64_CTRL_COREFLAGS	0x0ff00000	/* core specific flags */
-#define	D64_CTRL1_NOTPCIE	((uint32)1 << 18)	/* buirst size control */
 #define	D64_CTRL1_EOT		((uint32)1 << 28)	/* end of descriptor table */
 #define	D64_CTRL1_IOC		((uint32)1 << 29)	/* interrupt on completion */
 #define	D64_CTRL1_EOF		((uint32)1 << 30)	/* end of frame */

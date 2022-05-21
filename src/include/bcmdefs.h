@@ -1,7 +1,7 @@
 /*
  * Misc system wide definitions
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmdefs.h 545635 2015-04-01 07:09:17Z $
+ * $Id: bcmdefs.h 377098 2013-01-04 03:52:54Z $
  */
 
 #ifndef	_bcmdefs_h_
@@ -31,13 +31,6 @@
  */
 #define BCM_REFERENCE(data)	((void)(data))
 
-/* Allow for suppressing unused variable warnings. */
-#ifdef __GNUC__
-#define UNUSED_VAR     __attribute__ ((unused))
-#else
-#define UNUSED_VAR
-#endif
-
 #ifdef EFI
 #define STATIC_ASSERT(expr)	ASSERT((expr))
 #else
@@ -46,11 +39,11 @@
  */
 #define STATIC_ASSERT(expr) { \
 	/* Make sure the expression is constant. */ \
-	typedef enum { _STATIC_ASSERT_NOT_CONSTANT = (expr) } _static_assert_e UNUSED_VAR; \
+	typedef enum { _STATIC_ASSERT_NOT_CONSTANT = (expr) } _static_assert_e; \
 	/* Make sure the expression is true. */ \
-	typedef char STATIC_ASSERT_FAIL[(expr) ? 1 : -1] UNUSED_VAR; \
+	typedef char STATIC_ASSERT_FAIL[(expr) ? 1 : -1]; \
 }
-#endif /* #ifdef EFI */
+#endif
 
 /* Reclaiming text and data :
  * The following macros specify special linker sections that can be reclaimed
@@ -62,7 +55,6 @@
 
 extern bool bcmreclaimed;
 extern bool attach_part_reclaimed;
-extern bool preattach_part_reclaimed;
 
 #define BCMATTACHDATA(_data)	__attribute__ ((__section__ (".dataini2." #_data))) _data
 #define BCMATTACHFN(_fn)	__attribute__ ((__section__ (".textini2." #_fn), noinline)) _fn
@@ -79,13 +71,11 @@ extern bool preattach_part_reclaimed;
 #define BCMINITDATA(_data)	__attribute__ ((__section__ (".dataini1." #_data))) _data
 #define BCMINITFN(_fn)		__attribute__ ((__section__ (".textini1." #_fn), noinline)) _fn
 #define CONST
-#else /* BCMRECLAIM */
+#else
 #define BCMINITDATA(_data)	_data
 #define BCMINITFN(_fn)		_fn
-#ifndef CONST
 #define CONST	const
 #endif
-#endif /* BCMRECLAIM */
 
 /* Non-manufacture or internal attach function/dat */
 #if !defined(WLTEST)
@@ -99,14 +89,6 @@ extern bool preattach_part_reclaimed;
 #define BCMUNINITFN(_fn)	_fn
 
 #define BCMFASTPATH
-
-/* used for per O3 function optimization for Rx & Tx DATAPATH in DONGLE build */
-#if defined(DATAFASTPATH)
-#define BCMSPEEDOPT 	__attribute__ ((optimize(push, DATAFASTPATH_FLAGS)))
-#else
-#define BCMSPEEDOPT
-#endif /* DATAFASTPATH */
-
 #else /* DONGLEBUILD */
 
 #define bcmreclaimed 		0
@@ -116,23 +98,12 @@ extern bool preattach_part_reclaimed;
 #define BCMPREATTACHFN(_fn)	_fn
 #define BCMINITDATA(_data)	_data
 #define BCMINITFN(_fn)		_fn
-#define BCMROMDATA(_data)	_data
-#define BCMROMFN(_fn)		_fn
 #define BCMUNINITFN(_fn)	_fn
 #define	BCMNMIATTACHFN(_fn)	_fn
 #define	BCMNMIATTACHDATA(_data)	_data
 #define CONST	const
-
-#define BCMSPEEDOPT
-
-#if defined(__ARM_ARCH_7A__) && !defined(OEM_ANDROID)
-#define BCM47XX_CA9
-#else
-#undef BCM47XX_CA9
-#endif /* BCM47XX && __ARM_ARCH_7A__ && !OEM_ANDROID */
-
 #ifndef BCMFASTPATH
-#if defined(mips) || defined(BCM47XX_CA9)
+#if defined(mips) || defined(__ARM_ARCH_7A__)
 #define BCMFASTPATH		__attribute__ ((__section__ (".text.fastpath")))
 #define BCMFASTPATH_HOST	__attribute__ ((__section__ (".text.fastpath_host")))
 #else
@@ -143,19 +114,29 @@ extern bool preattach_part_reclaimed;
 
 #endif /* DONGLEBUILD */
 
-
-/* Use the BCMRAMFN() macro to tag functions in source that must be included in RAM (excluded from
- * ROM). This should eliminate the need to manually specify these functions in the ROM config file.
- * It should only be used in special cases where the function must be in RAM for *all* ROM-based
- * chips.
- */
 #if defined(BCMROMBUILD)
-	#define BCMRAMFN(_fn)	__attribute__ ((__section__ (".text_ram." #_fn), noinline)) _fn
-#else
-	#define BCMRAMFN(_fn)	_fn
+typedef struct {
+	uint16 esiz;
+	uint16 cnt;
+	void *addr;
+} bcmromdat_patch_t;
 #endif
 
+/* Put some library data/code into ROM to reduce RAM requirements */
+#if defined(BCMROMBUILD) && !defined(BCMROMSYMGEN_BUILD) && !defined(BCMJMPTBL_TCAM)
+#include <bcmjmptbl.h>
 #define STATIC	static
+#else /* !BCMROMBUILD */
+#define BCMROMDATA(_data)	_data
+#define BCMROMDAT_NAME(_data)	_data
+#define BCMROMFN(_fn)		_fn
+#define BCMROMFN_NAME(_fn)	_fn
+#define STATIC	static
+#define BCMROMDAT_ARYSIZ(data)	ARRAYSIZE(data)
+#define BCMROMDAT_SIZEOF(data)	sizeof(data)
+#define BCMROMDAT_APATCH(data)
+#define BCMROMDAT_SPATCH(data)
+#endif /* !BCMROMBUILD */
 
 /* Bus types */
 #define	SI_BUS			0	/* SOC Interconnect */
@@ -204,46 +185,33 @@ extern bool preattach_part_reclaimed;
 #define CHIPREV(rev)	(rev)
 #endif
 
-#ifdef BCMPCIEREV
-#define PCIECOREREV(rev)	(BCMPCIEREV)
-#else
-#define PCIECOREREV(rev)	(rev)
-#endif
-
 /* Defines for DMA Address Width - Shared between OSL and HNDDMA */
 #define DMADDR_MASK_32 0x0		/* Address mask for 32-bits */
 #define DMADDR_MASK_30 0xc0000000	/* Address mask for 30-bits */
-#define DMADDR_MASK_26 0xFC000000	/* Address maks for 26-bits */
 #define DMADDR_MASK_0  0xffffffff	/* Address mask for 0-bits (hi-part) */
 
-#define	DMADDRWIDTH_26  26 /* 26-bit addressing capability */
 #define	DMADDRWIDTH_30  30 /* 30-bit addressing capability */
 #define	DMADDRWIDTH_32  32 /* 32-bit addressing capability */
 #define	DMADDRWIDTH_63  63 /* 64-bit addressing capability */
 #define	DMADDRWIDTH_64  64 /* 64-bit addressing capability */
 
+#ifdef BCMDMA64OSL
 typedef struct {
 	uint32 loaddr;
 	uint32 hiaddr;
 } dma64addr_t;
 
-#define PHYSADDR64HI(_pa) ((_pa).hiaddr)
-#define PHYSADDR64HISET(_pa, _val) \
+typedef dma64addr_t dmaaddr_t;
+#define PHYSADDRHI(_pa) ((_pa).hiaddr)
+#define PHYSADDRHISET(_pa, _val) \
 	do { \
 		(_pa).hiaddr = (_val);		\
 	} while (0)
-#define PHYSADDR64LO(_pa) ((_pa).loaddr)
-#define PHYSADDR64LOSET(_pa, _val) \
+#define PHYSADDRLO(_pa) ((_pa).loaddr)
+#define PHYSADDRLOSET(_pa, _val) \
 	do { \
 		(_pa).loaddr = (_val);		\
 	} while (0)
-
-#ifdef BCMDMA64OSL
-typedef dma64addr_t dmaaddr_t;
-#define PHYSADDRHI(_pa) PHYSADDR64HI(_pa)
-#define PHYSADDRHISET(_pa, _val) PHYSADDR64HISET(_pa, _val)
-#define PHYSADDRLO(_pa)  PHYSADDR64LO(_pa)
-#define PHYSADDRLOSET(_pa, _val) PHYSADDR64LOSET(_pa, _val)
 
 #else
 typedef unsigned long dmaaddr_t;
@@ -255,7 +223,6 @@ typedef unsigned long dmaaddr_t;
 		(_pa) = (_val);			\
 	} while (0)
 #endif /* BCMDMA64OSL */
-#define PHYSADDRISZERO(_pa) (PHYSADDRLO(_pa) == 0 && PHYSADDRHI(_pa) == 0)
 
 /* One physical DMA segment */
 typedef struct  {
@@ -298,7 +265,7 @@ typedef struct {
 /* add 40 bytes to allow for extra RPC header and info  */
 #define BCMEXTRAHDROOM 260
 #else /* BCM_RPC_NOCOPY || BCM_RPC_TXNOCOPY */
-#if defined(linux) && defined(BCM47XX_CA9)
+#if defined(linux) && defined(__ARM_ARCH_7A__)
 #define BCMEXTRAHDROOM 224
 #else
 #ifdef CTFMAP
@@ -306,7 +273,7 @@ typedef struct {
 #else /* CTFMAP */
 #define BCMEXTRAHDROOM 204
 #endif /* CTFMAP */
-#endif /* linux && BCM47XX_CA9 */
+#endif /* linux && __ARM_ARCH_7A__ */
 #endif /* BCM_RPC_NOCOPY || BCM_RPC_TXNOCOPY */
 
 /* Packet alignment for most efficient SDIO (can change based on platform) */
@@ -335,11 +302,6 @@ typedef struct {
 #define BCMDBG_ASSERT
 
 #endif /* BCMDBG */
-
-#if defined(NO_BCMDBG_ASSERT)
-# undef BCMDBG_ASSERT
-# undef BCMASSERT_LOG
-#endif
 
 
 /* Macros for doing definition and get/set of bitfields
@@ -370,109 +332,10 @@ typedef struct {
 #endif
 
 /* Max. nvram variable table size */
-#ifndef MAXSZ_NVRAM_VARS
-/* SROM12 changes */
-#define	MAXSZ_NVRAM_VARS	10000
-#endif
-
-#ifdef ATE_BUILD
-#define ATE_NVRAM_MAXSIZE 18432
-#endif
+#define	MAXSZ_NVRAM_VARS	4096
 
 #ifdef EFI
 #define __attribute__(x)	/* CSTYLED */
 #endif
-
-/* WL_ENAB_RUNTIME_CHECK may be set based upon the #define below (for ROM builds). It may also
- * be defined via makefiles (e.g. ROM auto abandon unoptimized compiles).
- */
-#if defined(BCMROMBUILD)
-	#ifndef WL_ENAB_RUNTIME_CHECK
-		#define WL_ENAB_RUNTIME_CHECK
-	#endif
-#endif /* BCMROMBUILD */
-
-
-#ifdef BCMLFRAG /* BCMLFRAG support enab macros  */
-	extern bool _bcmlfrag;
-	#if defined(WL_ENAB_RUNTIME_CHECK) || !defined(DONGLEBUILD)
-		#define BCMLFRAG_ENAB() (_bcmlfrag)
-	#elif defined(BCMLFRAG_DISABLED)
-		#define BCMLFRAG_ENAB()	(0)
-	#else
-		#define BCMLFRAG_ENAB()	(1)
-	#endif
-#else
-	#define BCMLFRAG_ENAB()		(0)
-#endif /* BCMLFRAG_ENAB */
-#define	RXMODE1	1	/* descriptor split */
-#define	RXMODE2	2	/* descriptor split + classification */
-#define	RXMODE3	3	/* fifo split + classification */
-#define	RXMODE4	4	/* fifo split + classification + hdr conversion */
-
-#ifdef BCMSPLITRX /* BCMLFRAG support enab macros  */
-	extern bool _bcmsplitrx;
-	extern uint8 _bcmsplitrx_mode;
-	#if defined(WL_ENAB_RUNTIME_CHECK) || !defined(DONGLEBUILD)
-		#define BCMSPLITRX_ENAB() (_bcmsplitrx)
-		#define BCMSPLITRX_MODE() (_bcmsplitrx_mode)
-	#elif defined(BCMSPLITRX_DISABLED)
-		#define BCMSPLITRX_ENAB()	(0)
-		#define BCMSPLITRX_MODE()	(0)
-	#else
-		#define BCMSPLITRX_ENAB()	(1)
-		#define BCMSPLITRX_MODE() (_bcmsplitrx_mode)
-	#endif
-#else
-	#define BCMSPLITRX_ENAB()		(0)
-	#define BCMSPLITRX_MODE()		(0)
-#endif /* BCMSPLITRX */
-
-#ifdef BCMPCIEDEV /* BCMPCIEDEV support enab macros */
-extern bool _pciedevenab;
-	#if defined(WL_ENAB_RUNTIME_CHECK) || !defined(DONGLEBUILD)
-		#define BCMPCIEDEV_ENAB() (_pciedevenab)
-	#elif defined(BCMPCIEDEV_ENABLED)
-		#define BCMPCIEDEV_ENAB()	1
-	#else
-		#define BCMPCIEDEV_ENAB()	0
-	#endif
-#else
-	#define BCMPCIEDEV_ENAB()	0
-#endif /* BCMPCIEDEV */
-
-#define SPLIT_RXMODE1()	((BCMSPLITRX_MODE() == RXMODE1))
-#define SPLIT_RXMODE2()	((BCMSPLITRX_MODE() == RXMODE2))
-#define SPLIT_RXMODE3()	((BCMSPLITRX_MODE() == RXMODE3))
-#define SPLIT_RXMODE4()	((BCMSPLITRX_MODE() == RXMODE4))
-
-#define PKT_CLASSIFY()	(SPLIT_RXMODE2() || SPLIT_RXMODE3() || SPLIT_RXMODE4())
-#define RXFIFO_SPLIT()	(SPLIT_RXMODE3() || SPLIT_RXMODE4())
-#define HDR_CONV()	(SPLIT_RXMODE4())
-
-#define PKT_CLASSIFY_EN(x)	((PKT_CLASSIFY()) && (PKT_CLASSIFY_FIFO == (x)))
-#ifdef BCM_SPLITBUF
-	extern bool _bcmsplitbuf;
-	#if defined(WL_ENAB_RUNTIME_CHECK) || !defined(DONGLEBUILD)
-		#define BCM_SPLITBUF_ENAB() (_bcmsplitbuf)
-	#elif defined(BCM_SPLITBUF_DISABLED)
-		#define BCM_SPLITBUF_ENAB()	(0)
-	#else
-		#define BCM_SPLITBUF_ENAB()	(1)
-	#endif
-#else
-	#define BCM_SPLITBUF_ENAB()		(0)
-#endif	/* BCM_SPLITBUF */
-/* Max size for reclaimable NVRAM array */
-#ifdef DL_NVRAM
-#define NVRAM_ARRAY_MAXSIZE	DL_NVRAM
-#elif defined(ATE_BUILD)
-#define  NVRAM_ARRAY_MAXSIZE ATE_NVRAM_MAXSIZE
-#else
-#define NVRAM_ARRAY_MAXSIZE	MAXSZ_NVRAM_VARS
-#endif /* DL_NVRAM */
-
-extern uint32 gFWID;
-
 
 #endif /* _bcmdefs_h_ */

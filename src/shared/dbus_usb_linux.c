@@ -2,7 +2,7 @@
  * Dongle BUS interface
  * USB Linux Implementation
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,20 +16,14 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: dbus_usb_linux.c 452339 2014-01-30 00:41:10Z $
+ * $Id: dbus_usb_linux.c 361376 2012-10-08 11:48:03Z $
  */
 
 #include <typedefs.h>
 #include <osl.h>
 
-/**
- * DBUS_LINUX_RXDPC is created for router platform performance tuning. A separate thread is created
- * to handle USB RX and avoid the call chain getting too long and enhance cache hit rate.
+/* DBUS_LINUX_RXDPC setting is in wlconfig file.
  *
- * DBUS_LINUX_RXDPC setting is in wlconfig file.
- */
-
-/*
  * If DBUS_LINUX_RXDPC is off, spin_lock_bh() for CTFPOOL in
  * linux_osl.c has to be changed to spin_lock_irqsave() because
  * PKTGET/PKTFREE are no longer in bottom half.
@@ -37,12 +31,11 @@
  * Right now we have another queue rpcq in wl_linux.c. Maybe we
  * can eliminate that one to reduce the overhead.
  *
- * Enabling 2nd EP and DBUS_LINUX_RXDPC causing traffic from
+ * Enabling 2nd EP and DBUS_LINUX_RXDPC causing traffic form
  * both EP's to be queued in the same rx queue. If we want
  * RXDPC to work with 2nd EP. The EP for RPC call return
  * should bypass the dpc and go directly up.
  */
-
 /* #define DBUS_LINUX_RXDPC */
 
 /* Dbus histogram for ntxq, nrxq, dpc parameter tuning */
@@ -69,25 +62,17 @@
 #include <linux/firmware.h>
 #ifdef DBUS_LINUX_RXDPC
 #include <linux/sched.h>
-#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
+#define RESCHED()	_cond_resched()
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+#define RESCHED()	cond_resched()
+#else
+#define RESCHED()	__cond_resched()
+#endif /* LINUX_VERSION_CODE  */
+#endif	/* DBUS_LINUX_RXDPC */
 
 #ifdef USBOS_THREAD
-/**
- * The usb-thread is designed to provide currency on multiprocessors and SMP linux kernels. On the
- * dual cores platform, the WLAN driver, without threads, executed only on CPU0. The driver consumed
- * almost of 100% on CPU0, while CPU1 remained idle. The behavior was observed on Broadcom's STB.
- *
- * The WLAN driver consumed most of CPU0 and not CPU1 because tasklets/queues, software irq, and
- * hardware irq are executing from CPU0, only. CPU0 became the system's bottle-neck. TPUT is lower
- * and system's responsiveness is slower.
- *
- * To improve system responsiveness and TPUT usb-thread was implemented. The system's threads could
- * be scheduled to run on any core. One core could be processing data in the usb-layer and the other
- * core could be processing data in the wl-layer.
- *
- * For further info see [WlThreadAndUsbThread] Twiki.
- */
-
 #include <linux/kthread.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -95,114 +80,109 @@
 #include <linux/list.h>
 #include <linux_osl.h>
 #endif /* USBOS_THREAD */
+#ifdef USBSHIM
+#include <bcm_usbshim.h>
+const struct s_usburb *usburb;
 
+#define USB_ALLOC_URB()         (usburb->bcm_alloc_urb != NULL ? usburb->bcm_alloc_urb(0) : 0)
+#define USB_SUBMIT_URB(urb)     (usburb->bcm_submit_urb != NULL ? usburb->bcm_submit_urb(urb) : 0)
+#define USB_UNLINK_URB(urb)     (usburb->bcm_kill_urb != NULL ? usburb->bcm_kill_urb(urb) : 0)
+#define USB_FREE_URB(urb)       (usburb->bcm_free_urb != NULL ? usburb->bcm_free_urb(urb) : 0)
+#define USB_REGISTER()          (usburb->bcm_register != NULL ? \
+					usburb->bcm_register(&dbus_usbdev) : DBUS_ERR)
+#define USB_DEREGISTER()        (usburb->bcm_deregister != NULL ? \
+					usburb->bcm_deregister(&dbus_usbdev) : 0)
 
-#ifdef DBUS_LINUX_RXDPC
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
-#define RESCHED()   _cond_resched()
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
-#define RESCHED()   cond_resched()
+#define USB_CONTROL_MSG(dev, pipe, request, requesttype, value, index, data, size, timeout) \
+	(usburb->bcm_usb_control_msg != NULL ? \
+	usburb->bcm_usb_control_msg((dev), (pipe), (request), (requesttype), (value), (index), \
+	(data), (size), (timeout)) : 0)
+#if defined(CONFIG_USB_SUSPEND)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && (LINUX_VERSION_CODE < \
+	KERNEL_VERSION(2, 6, 33)))
+#define USB_AUTOPM_SET_INTERFACE(intf)	(usburb->bcm_autopm_set_interface != NULL ? \
+					usburb->bcm_autopm_set_interface(intf) : 0)
 #else
-#define RESCHED()   __cond_resched()
-#endif /* LINUX_VERSION_CODE  */
-#endif	/* DBUS_LINUX_RXDPC */
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
-#define KERNEL26
-#endif
-
-/* Starting with the 3.10 kernel release, dynamic PM support for USB is present whenever
- * the kernel was built with CONFIG_PM_RUNTIME enabled. The CONFIG_USB_SUSPEND option has
- * been eliminated.
- */
-#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) \
-	|| ((LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 1)) && defined(CONFIG_PM_RUNTIME))
-/* For USB power management support, see Linux kernel: Documentation/usb/power-management.txt */
-#define USB_SUSPEND_AVAILABLE
-#endif
-
-#ifdef KERNEL26
-#define USB_ALLOC_URB()      usb_alloc_urb(0, GFP_ATOMIC)
-#define USB_SUBMIT_URB(urb)  usb_submit_urb(urb, GFP_ATOMIC)
-#define USB_UNLINK_URB(urb)  (usb_kill_urb(urb))
-#define USB_FREE_URB(urb)    (usb_free_urb(urb))
-#define USB_REGISTER()       usb_register(&dbus_usbdev)
-#define USB_DEREGISTER()     usb_deregister(&dbus_usbdev)
-
-#if defined(USB_SUSPEND_AVAILABLE)
-/* See Linux kernel: Documentation/usb/power-management.txt */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 33))
-/*
- * usb_autopm_set_interface() triggers auto-suspend or auto-resume. It has to run in a sleepable
- * process context (so e.g. not holding any spin lock)
- */
-#define USB_AUTOPM_SET_INTERFACE(intf)  usb_autopm_set_interface(intf)
-#else
-#define USB_ENABLE_AUTOSUSPEND(udev)    usb_enable_autosuspend(udev)
-#define USB_DISABLE_AUTOSUSPEND(udev)   usb_disable_autosuspend(udev)
+#define USB_ENABLE_AUTOSUSPEND(udev)	(usburb->bcm_enable_autosuspend != NULL ? \
+					usburb->bcm_enable_autosuspend(udev) : 0)
 #endif  /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) .....  */
-#endif  /* defined(USB_SUSPEND_AVAILABLE) */
+#endif  /* defined(CONFIG_USB_SUSPEND) */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
-#define USB_AUTOPM_GET_INTERFACE_ASYNC(intf)	usb_autopm_get_interface_async(intf)
-#define USB_AUTOPM_PUT_INTERFACE_ASYNC(intf)	usb_autopm_put_interface_async(intf)
-#define USB_MARK_LAST_BUSY(dev)			usb_mark_last_busy(dev)
-#else
-#define USB_AUTOPM_GET_INTERFACE_ASYNC(intf)
-#define USB_AUTOPM_PUT_INTERFACE_ASYNC(intf)
-#define USB_MARK_LAST_BUSY(dev)
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)) */
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+
+#define USB_ALLOC_URB()		usb_alloc_urb(0, GFP_ATOMIC)
+#define USB_SUBMIT_URB(urb)	usb_submit_urb(urb, GFP_ATOMIC)
+#define USB_UNLINK_URB(urb)     (usb_kill_urb(urb))
+#define USB_FREE_URB(urb)       (usb_free_urb(urb))
+#define USB_REGISTER()          usb_register(&dbus_usbdev)
+#define USB_DEREGISTER()        usb_deregister(&dbus_usbdev)
 
 #define USB_CONTROL_MSG(dev, pipe, request, requesttype, value, index, data, size, timeout) \
 	usb_control_msg((dev), (pipe), (request), (requesttype), (value), (index), \
 	(data), (size), (timeout))
-#define USB_BUFFER_ALLOC(dev, size, mem, dma)	usb_buffer_alloc(dev, size, mem, dma)
-#define USB_BUFFER_FREE(dev, size, data, dma)	usb_buffer_free(dev, size, data, dma)
 
-#ifdef WL_URB_ZPKT
-#define URB_QUEUE_BULK   URB_ZERO_PACKET
+#if defined(CONFIG_USB_SUSPEND)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && (LINUX_VERSION_CODE < \
+	KERNEL_VERSION(2, 6, 33)))
+#define USB_AUTOPM_SET_INTERFACE(intf)	 usb_autopm_set_interface(intf)
 #else
-#define URB_QUEUE_BULK   0
-#endif /* WL_URB_ZPKT */
+#define USB_ENABLE_AUTOSUSPEND(udev)	 usb_enable_autosuspend(udev)
+#endif  /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) .....  */
+#endif  /* defined(CONFIG_USB_SUSPEND) */
 
+#else /* 2.4 */
+
+#define USB_ALLOC_URB()		usb_alloc_urb(0)
+#define USB_SUBMIT_URB(urb)	usb_submit_urb(urb)
+#define USB_UNLINK_URB(urb)	usb_unlink_urb(urb)
+#define USB_FREE_URB(urb)       (usb_free_urb(urb))
+#define USB_REGISTER()          usb_register(&dbus_usbdev)
+#define USB_DEREGISTER()        usb_deregister(&dbus_usbdev)
+
+#define USB_CONTROL_MSG(dev, pipe, request, requesttype, value, index, data, size, timeout) \
+	usb_control_msg((dev), (pipe), (request), (requesttype), (value), (index), \
+	(data), (size), (timeout))
+#endif /* 2.4 */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0))
+#define KERNEL26
+
+#define USB_BUFFER_ALLOC(dev, size, mem, dma) \
+				usb_buffer_alloc(dev, size, mem, dma)
+#define USB_BUFFER_FREE(dev, size, data, dma) \
+				usb_buffer_free(dev, size, data, dma)
+#ifdef WL_URB_ZPKT
+#define URB_QUEUE_BULK		URB_ZERO_PACKET
+#else
+#define URB_QUEUE_BULK      0
+#endif /* WL_URB_ZPKT */
 #define CALLBACK_ARGS		struct urb *urb, struct pt_regs *regs
-#define CALLBACK_ARGS_DATA	urb, regs
 #define CONFIGDESC(usb)		(&((usb)->actconfig)->desc)
+
 #define IFPTR(usb, idx)		((usb)->actconfig->interface[idx])
 #define IFALTS(usb, idx)	(IFPTR((usb), (idx))->altsetting[0])
 #define IFDESC(usb, idx)	IFALTS((usb), (idx)).desc
 #define IFEPDESC(usb, idx, ep)	(IFALTS((usb), (idx)).endpoint[ep]).desc
 #ifdef DBUS_LINUX_RXDPC
-#define DAEMONIZE(a)	daemonize(a); allow_signal(SIGKILL); allow_signal(SIGTERM);
+#define DAEMONIZE(a)		daemonize(a); allow_signal(SIGKILL); allow_signal(SIGTERM);
 #define SET_NICE(n)		set_user_nice(current, n)
 #endif
 
-#else /* #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0)) */
-
-#define USB_ALLOC_URB()     usb_alloc_urb(0)
-#define USB_SUBMIT_URB(urb) usb_submit_urb(urb)
-#define USB_UNLINK_URB(urb) usb_unlink_urb(urb)
-#define USB_FREE_URB(urb)   (usb_free_urb(urb))
-#define USB_REGISTER()      usb_register(&dbus_usbdev)
-#define USB_DEREGISTER()    usb_deregister(&dbus_usbdev)
-#define USB_AUTOPM_GET_INTERFACE_ASYNC(intf)
-#define USB_AUTOPM_PUT_INTERFACE_ASYNC(intf)
-#define USB_MARK_LAST_BUSY(dev)
-
-#define USB_CONTROL_MSG(dev, pipe, request, requesttype, value, index, data, size, timeout) \
-	usb_control_msg((dev), (pipe), (request), (requesttype), (value), (index), \
-	(data), (size), (timeout))
-#define USB_BUFFER_ALLOC(dev, size, mem, dma)  kmalloc(size, mem)
-#define USB_BUFFER_FREE(dev, size, data, dma)  kfree(data)
+#else /* 2.4 */
 
 #ifdef WL_URB_ZPKT
-#define URB_QUEUE_BULK   USB_QUEUE_BULK|URB_ZERO_PACKET
+#define URB_QUEUE_BULK		USB_QUEUE_BULK|URB_ZERO_PACKET
 #else
-#define URB_QUEUE_BULK   0
+#define URB_QUEUE_BULK		0
 #endif /*  WL_URB_ZPKT */
-
+#define USB_ALLOC_URB()		usb_alloc_urb(0)
+#define USB_SUBMIT_URB(urb)	usb_submit_urb(urb)
+#define USB_UNLINK_URB(urb)	usb_unlink_urb(urb)
+#define USB_BUFFER_ALLOC(dev, size, mem, dma) \
+				kmalloc(size, mem)
+#define USB_BUFFER_FREE(dev, size, data, dma) \
+				kfree(data)
 #define CALLBACK_ARGS		struct urb *urb
-#define CALLBACK_ARGS_DATA	urb
 #define CONFIGDESC(usb)		((usb)->actconfig)
 #define IFPTR(usb, idx)		(&(usb)->actconfig->interface[idx])
 #define IFALTS(usb, idx)	((usb)->actconfig->interface[idx].altsetting[0])
@@ -210,53 +190,38 @@
 #define IFEPDESC(usb, idx, ep)	(IFALTS((usb), (idx)).endpoint[ep])
 
 #ifdef DBUS_LINUX_RXDPC
-#define DAEMONIZE(a)    daemonize();
-#define SET_NICE(n)     do {current->nice = (n);} while (0)
-#endif /* DBUS_LINUX_RXDPC */
+#define DAEMONIZE(a)		daemonize();
+#define SET_NICE(n)		do {current->nice = (n);} while (0)
+#endif	/* DBUS_LINUX_RXDPC */
+#endif /* 2.4 */
 
-#endif /* #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0)) */
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 31))
-#define USB_SPEED_SUPER		5
-#endif  /* #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 31)) */
-
-#define CONTROL_IF   0
-#define BULK_IF      0
+#define CONTROL_IF		0
+#define BULK_IF			0
 
 #ifdef BCMUSBDEV_COMPOSITE
-#define USB_COMPIF_MAX       4
+#define USB_COMPIF_MAX		4
 
-#define USB_CLASS_WIRELESS   0xe0
-#define USB_CLASS_MISC       0xef
-#define USB_SUBCLASS_COMMON  0x02
-#define USB_PROTO_IAD        0x01
-#define USB_PROTO_VENDOR	 0xff
+#define USB_CLASS_WIRELESS	0xe0
+#define USB_CLASS_MISC		0xef
+#define USB_SUBCLASS_COMMON	0x02
+#define USB_PROTO_IAD		0x01
+#define USB_PROTO_VENDOR	0xff
 
-#define USB_QUIRK_NO_SET_INTF   0x04 /* device does not support set_interface */
+#define USB_QUIRK_NO_SET_INTF   0x04	/* device does not support set_interface */
 #endif /* BCMUSBDEV_COMPOSITE */
 
-#define USB_SYNC_WAIT_TIMEOUT  300  /* ms */
+#define USB_SYNC_WAIT_TIMEOUT	300	/* ms */
 
 /* Private data kept in skb */
-#define SKB_PRIV(skb, idx)  (&((void **)skb->cb)[idx])
-#define SKB_PRIV_URB(skb)   (*(struct urb **)SKB_PRIV(skb, 0))
+#define SKB_PRIV(skb, idx)	(&((void **)skb->cb)[idx])
+#define SKB_PRIV_URB(skb)	(*(struct urb **)SKB_PRIV(skb, 0))
 
-#define BCM_USB_HOST_TOTALLEN_ZLP      512
-#define BCM_USB_HOST_TOTALLEN_ZLP_PAD  8
-
-#ifndef DBUS_USB_RXQUEUE_BATCH_ADD
-/* items to add each time within limit */
-#define DBUS_USB_RXQUEUE_BATCH_ADD            8
-#endif
-#ifndef DBUS_USB_RXQUEUE_LOWER_WATERMARK
-/* add a new batch req to rx queue when waiting item count reduce to this number */
-#define DBUS_USB_RXQUEUE_LOWER_WATERMARK      4
-#endif
 enum usbos_suspend_state {
 	USBOS_SUSPEND_STATE_DEVICE_ACTIVE = 0, /* Device is busy, won't allow suspend */
-	USBOS_SUSPEND_STATE_SUSPEND_PENDING,   /* Device is idle, can be suspended */
-	                                       /* Wating PM to suspend */
-	USBOS_SUSPEND_STATE_SUSPENDED          /* Device suspended */
+	USBOS_SUSPEND_STATE_SUSPEND_PENDING,	/* Device is idle, can be suspended.
+						* Wating PM to suspend the device
+						*/
+	USBOS_SUSPEND_STATE_SUSPENDED	/* Device suspended */
 };
 
 typedef struct {
@@ -273,12 +238,10 @@ typedef struct {
 	/* Imported */
 	struct usb_device *usb;	/* USB device pointer from OS */
 	struct urb *intr_urb; /* URB for interrupt endpoint */
-	struct list_head req_rxfreeq;
-	struct list_head req_txfreeq;
+	struct list_head req_freeq;
 	struct list_head req_rxpostedq;	/* Posted down to USB driver for RX */
 	struct list_head req_txpostedq;	/* Posted down to USB driver for TX */
-	spinlock_t rxfree_lock; /* Lock for rx free list */
-	spinlock_t txfree_lock; /* Lock for tx free list */
+	spinlock_t free_lock; /* Lock for free list */
 	spinlock_t rxposted_lock; /* Lock for rx posted list */
 	spinlock_t txposted_lock; /* Lock for tx posted list */
 	uint rx_pipe, tx_pipe, intr_pipe, rx_pipe2; /* Pipe numbers for USB I/O */
@@ -308,9 +271,7 @@ typedef struct {
 
 	int maxps;
 	int txposted;
-	atomic_t rxposted;
-	atomic_t txallocated;
-	atomic_t rxallocated;
+	int rxposted;
 	bool rxctl_deferrespok;	/* Get a response for setup from dongle */
 
 	wait_queue_head_t wait;
@@ -336,20 +297,19 @@ typedef struct {
 	struct dma_pool *qtd_pool; /* QTD pool for USB optimization only */
 	int tx_ep, rx_ep, rx2_ep;  /* EPs for USB optimization */
 	struct usb_device *usb_device; /* USB device for optimization */
-#if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX) /** Linux USB AP related */
+#if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX)
 	spinlock_t fastpath_lock;
 #endif
 } usbos_info_t;
 
 typedef struct urb_req {
-	void         *pkt;
-	int          buf_len;
-	struct urb   *urb;
-	void         *arg;
+	void *pkt;
+	int buf_len;
+	struct urb *urb;
+	void *arg;
 	usbos_info_t *usbinfo;
 	struct list_head urb_list;
 } urb_req_t;
-
 #ifdef USBOS_THREAD
 typedef struct usbos_list_entry {
 	struct list_head    list;   /* must be first */
@@ -358,10 +318,11 @@ typedef struct usbos_list_entry {
 	int                 urb_status;
 } usbos_list_entry_t;
 
-static void* dbus_usbos_thread_init(usbos_info_t *usbos_info);
-static void  dbus_usbos_thread_deinit(usbos_info_t *usbos_info);
-static void  dbus_usbos_dispatch_schedule(CALLBACK_ARGS);
-static int   dbus_usbos_thread_func(void *data);
+void* dbus_usbos_thread_init(usbos_info_t *usbos_info);
+void  dbus_usbos_thread_deinit(usbos_info_t *usbos_info);
+void  dbus_usbos_dispatch_schedule(CALLBACK_ARGS);
+int   dbus_usbos_thread_func(void *data);
+void  dbus_usbos_recv_complete_handle(urb_req_t *req, int len, int status);
 #endif /* USBOS_THREAD */
 
 /* Shared Function prototypes */
@@ -384,18 +345,13 @@ static void dbusos_stop(usbos_info_t *usbos_info);
 #ifdef KERNEL26
 static int dbus_usbos_probe(struct usb_interface *intf, const struct usb_device_id *id);
 static void dbus_usbos_disconnect(struct usb_interface *intf);
-#if defined(USB_SUSPEND_AVAILABLE)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) \
+	&& (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 38))
 static int dbus_usbos_resume(struct usb_interface *intf);
 static int dbus_usbos_suspend(struct usb_interface *intf, pm_message_t message);
-#if !defined(WLC_HIGH) && !defined(WLC_LOW)
-/* at the moment, used for full dongle host driver only */
-static int dbus_usbos_reset_resume(struct usb_interface *intf);
-#endif
-#if defined(WLC_HIGH) && !defined(WLC_LOW) /* BMAC driver specific */
 static void dbus_usbos_sleep(usbos_info_t *usbos_info);
-#endif /* WLC_HIGH / WLC_LOW */
-#endif /* USB_SUSPEND_AVAILABLE */
-#else /* KERNEL26 */
+#endif
+#else
 static void *dbus_usbos_probe(struct usb_device *usb, unsigned int ifnum,
 	const struct usb_device_id *id);
 static void dbus_usbos_disconnect(struct usb_device *usb, void *ptr);
@@ -406,7 +362,7 @@ static bool dbus_usbos_ctl_send_debugtrig(usbos_info_t *usbinfo);
 #endif /* USB_TRIGGER_DEBUG */
 static struct usb_device_id devid_table[] = {
 	{ USB_DEVICE(BCM_DNGL_VID, 0x0000) }, /* Configurable via register() */
-#if defined(BCM_DNGL_EMBEDIMAGE) || defined(BCM_REQUEST_FW)
+#if !defined(WLC_HIGH) || defined(BCM_DNGL_EMBEDIMAGE) || defined(BCM_REQUEST_FW)
 	{ USB_DEVICE(BCM_DNGL_VID, BCM_DNGL_BL_PID_4328) },
 	{ USB_DEVICE(BCM_DNGL_VID, BCM_DNGL_BL_PID_4322) },
 	{ USB_DEVICE(BCM_DNGL_VID, BCM_DNGL_BL_PID_4319) },
@@ -423,46 +379,44 @@ static struct usb_device_id devid_table[] = {
 	{ }
 };
 
+#define BCM_USB_HOST_TOTALLEN_ZLP 512
+#define BCM_USB_HOST_TOTALLEN_ZLP_PAD 8
+
 MODULE_DEVICE_TABLE(usb, devid_table);
 
-/** functions called by the Linux kernel USB subsystem */
 static struct usb_driver dbus_usbdev = {
 	name:           "dbus_usbdev",
 	probe:          dbus_usbos_probe,
 	disconnect:     dbus_usbos_disconnect,
 	id_table:       devid_table,
-#if defined(USB_SUSPEND_AVAILABLE)
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) \
+	&& (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 38))
 	suspend: 	dbus_usbos_suspend,
 	resume:  	dbus_usbos_resume,
-#if !defined(WLC_HIGH) && !defined(WLC_LOW) /* DHD specific */
-	reset_resume:	dbus_usbos_reset_resume,
-#endif /* WLC_HIGH / WLC_LOW */
-	/* Linux USB core will allow autosuspend for devices bound to this driver */
 	supports_autosuspend: 1
-#endif /* USB_SUSPEND_AVAILABLE */
+#endif
 };
 
-/** This stores USB info during Linux probe callback
+/* This stores USB info during Linux probe callback
  * since attach() is not called yet at this point
  */
 typedef struct {
-	void    *usbos_info;
+	void *usbos_info;
 	struct usb_device *usb; /* USB device pointer from OS */
-	uint    rx_pipe;   /* Pipe numbers for USB I/O */
-	uint    tx_pipe;   /* Pipe numbers for USB I/O */
-	uint    intr_pipe; /* Pipe numbers for USB I/O */
-	uint    rx_pipe2;  /* Pipe numbers for USB I/O */
-	int     intr_size; /* Size of interrupt message */
-	int     interval;  /* Interrupt polling interval */
-	bool    dldone;
-	int     vid;
-	int     pid;
-	bool    dereged;
-	bool    disc_cb_done;
-	DEVICE_SPEED    device_speed;
+	uint rx_pipe, tx_pipe, intr_pipe, rx_pipe2; /* Pipe numbers for USB I/O */
+	int intr_size; /* Size of interrupt message */
+	int interval;  /* Interrupt polling interval */
+	bool dldone;
+	int vid;
+	int pid;
+	bool dereged;
+	bool disc_cb_done;
+	DEVICE_SPEED device_speed;
 	enum usbos_suspend_state suspend_state;
-	struct usb_interface     *intf;
+	struct usb_interface *intf;
 } probe_info_t;
+
+static probe_info_t g_probe_info;
 
 /*
  * USB Linux dbus_intf_t
@@ -480,7 +434,6 @@ static int  dbus_usbos_intf_up(void *bus);
 static int  dbus_usbos_intf_down(void *bus);
 static int  dbus_usbos_intf_stop(void *bus);
 static int  dbus_usbos_readreg(void *bus, uint32 regaddr, int datalen, uint32 *value);
-static int   dbus_usbos_intf_set_device_speed(void *bus, uint8 speed);
 int dbus_usbos_writereg(void *bus, uint32 regaddr, int datalen, uint32 data);
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
 static void dbus_usbos_intf_dump(void *bus, struct bcmstrbuf *b);
@@ -489,151 +442,70 @@ static int  dbus_usbos_intf_set_config(void *bus, dbus_config_t *config);
 static bool dbus_usbos_intf_recv_needed(void *bus);
 static void *dbus_usbos_intf_exec_rxlock(void *bus, exec_cb_t cb, struct exec_parms *args);
 static void *dbus_usbos_intf_exec_txlock(void *bus, exec_cb_t cb, struct exec_parms *args);
-#if defined(WLC_HIGH) && !defined(WLC_LOW)   /* BMAC host driver specific */
 static int dbus_usbos_intf_pnp(void *bus, int evnt);
-#endif
 #ifdef BCMUSBDEV_COMPOSITE
 static int dbus_usbos_intf_wlan(struct usb_device *usb);
 #endif /* BCMUSBDEV_COMPOSITE */
 
-/** functions called by dbus_usb.c */
 static dbus_intf_t dbus_usbos_intf = {
-	.attach = dbus_usbos_intf_attach,
-	.detach = dbus_usbos_intf_detach,
-	.up = dbus_usbos_intf_up,
-	.down = dbus_usbos_intf_down,
-	.send_irb = dbus_usbos_intf_send_irb,
-	.recv_irb = dbus_usbos_intf_recv_irb,
-	.cancel_irb = dbus_usbos_intf_cancel_irb,
-	.send_ctl = dbus_usbos_intf_send_ctl,
-	.recv_ctl = dbus_usbos_intf_recv_ctl,
-	.get_stats = NULL,
-	.get_attrib = dbus_usbos_intf_get_attrib,
-#if defined(WLC_HIGH) && !defined(WLC_LOW)   /* BMAC host driver specific */
-	.pnp = dbus_usbos_intf_pnp,
-#endif
-	.remove = NULL,
-	.resume = NULL,
-	.suspend = NULL,
-	.stop = dbus_usbos_intf_stop,
-	.reset = NULL,
-	.pktget = NULL,
-	.pktfree = NULL,
-	.iovar_op = NULL,
+	dbus_usbos_intf_attach,
+	dbus_usbos_intf_detach,
+	dbus_usbos_intf_up,
+	dbus_usbos_intf_down,
+	dbus_usbos_intf_send_irb,
+	dbus_usbos_intf_recv_irb,
+	dbus_usbos_intf_cancel_irb,
+	dbus_usbos_intf_send_ctl,
+	dbus_usbos_intf_recv_ctl,
+	NULL, /* get_stats */
+	dbus_usbos_intf_get_attrib,
+	dbus_usbos_intf_pnp, /* pnp */
+	NULL, /* remove */
+	NULL, /* resume */
+	NULL, /* suspend */
+	dbus_usbos_intf_stop,
+	NULL, /* reset */
+	NULL, /* pktget */
+	NULL, /* pktfree */
+	NULL, /* iovar_op */
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
-	.dump = dbus_usbos_intf_dump,
+	dbus_usbos_intf_dump, /* dump */
 #else
-	.dump = NULL,
+	NULL, /* dump */
 #endif /* BCMDBG || DBUS_LINUX_HIST */
-	.set_config = dbus_usbos_intf_set_config,
-	.get_config = NULL,
-	.device_exists = NULL,
-	.dlneeded = NULL,
-	.dlstart = NULL,
-	.dlrun = NULL,
-	.recv_needed = dbus_usbos_intf_recv_needed,
-	.exec_rxlock = dbus_usbos_intf_exec_rxlock,
-	.exec_txlock = dbus_usbos_intf_exec_txlock,
+	dbus_usbos_intf_set_config, /* set_config */
+	NULL, /* get_config */
+	NULL, /* device_exists */
+	NULL, /* dlneeded */
+	NULL, /* dlstart */
+	NULL, /* dlrun */
+	dbus_usbos_intf_recv_needed,
+	dbus_usbos_intf_exec_rxlock,
+	dbus_usbos_intf_exec_txlock,
 
-	.tx_timer_init = NULL,
-	.tx_timer_start = NULL,
-	.tx_timer_stop = NULL,
+	NULL, /* tx_timer_init */
+	NULL, /* tx_timer_start */
+	NULL, /* tx_timer_stop */
 
-	.sched_dpc = NULL,
-	.lock = NULL,
-	.unlock = NULL,
-	.sched_probe_cb = NULL,
+	NULL, /* sched_dpc */
+	NULL, /* lock */
+	NULL, /* unlock */
+	NULL, /* sched_probe_cb */
 
-	.shutdown = NULL,
+	NULL, /* shutdown */
 
-	.recv_stop = NULL,
-	.recv_resume = NULL,
+	NULL, /* recv_stop */
+	NULL, /* recv_resume */
 
-	.recv_irb_from_ep = dbus_usbos_intf_recv_irb_from_ep,
-	.readreg = dbus_usbos_readreg,
-	.set_device_speed = dbus_usbos_intf_set_device_speed
+	dbus_usbos_intf_recv_irb_from_ep,
+	dbus_usbos_readreg
 };
 
-static probe_info_t    g_probe_info;
-static probe_cb_t      probe_cb = NULL;
+static probe_cb_t probe_cb = NULL;
 static disconnect_cb_t disconnect_cb = NULL;
-static void            *probe_arg = NULL;
-static void            *disc_arg = NULL;
+static void *probe_arg = NULL;
+static void *disc_arg = NULL;
 
-#if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX)
-#define EHCI_PAGE_SIZE    4096
-
-/* Copies of structures located elsewhere. */
-
-typedef struct {
-	dbus_pub_t *pub;
-
-	void *cbarg;
-	dbus_intf_callbacks_t *cbs;
-	dbus_intf_t *drvintf;
-	void *usbosl_info;
-} usb_info_t;
-
-/** General info for all BUS */
-typedef struct dbus_irbq {
-	dbus_irb_t *head;
-	dbus_irb_t *tail;
-	int cnt;
-} dbus_irbq_t;
-
-/** This private structure dbus_info_t is also declared in dbus.c.
- * All the fields must be consistent in both declarations.
- */
-typedef struct dbus_info {
-	dbus_pub_t pub; /* MUST BE FIRST */
-
-	void *cbarg;
-	dbus_callbacks_t *cbs;
-	void *bus_info;
-	dbus_intf_t *drvintf;
-	uint8 *fw;
-	int fwlen;
-	uint32 errmask;
-	int rx_low_watermark;
-	int tx_low_watermark;
-	bool txoff;
-	bool txoverride;
-	bool rxoff;
-	bool tx_timer_ticking;
-
-	dbus_irbq_t *rx_q;
-	dbus_irbq_t *tx_q;
-
-#ifdef BCMDBG
-	int *txpend_q_hist;
-	int *rxpend_q_hist;
-#endif /* BCMDBG */
-#ifdef EHCI_FASTPATH_RX
-	atomic_t rx_outstanding;
-#endif
-	uint8 *nvram;
-	int	nvram_len;
-	uint8 *image;	/* buffer for combine fw and nvram */
-	int image_len;
-	uint8 *orig_fw;
-	int origfw_len;
-	int decomp_memsize;
-	dbus_extdl_t extdl;
-	int nvram_nontxt;
-} dbus_info_t;
-
-static atomic_t s_tx_pending;
-
-static int optimize_init(usbos_info_t *usbos_info, struct usb_device *usb, int out,
-	int in, int in2);
-static int optimize_deinit(usbos_info_t *usbos_info, struct usb_device *usb);
-#endif  /* #if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX) */
-
-
-/**
- * multiple code paths in this file dequeue a URB request, this function makes sure that it happens
- * in a concurrency save manner. Don't call this from a sleepable process context.
- */
 static urb_req_t * BCMFASTPATH
 dbus_usbos_qdeq(struct list_head *urbreq_q, spinlock_t *lock)
 {
@@ -672,11 +544,6 @@ dbus_usbos_qenq(struct list_head *urbreq_q, urb_req_t *req, spinlock_t *lock)
 
 }
 
-/**
- * multiple code paths in this file remove a URB request from a list, this function makes sure that
- * it happens in a concurrency save manner. Don't call this from a sleepable process context.
- * Is quite similar to dbus_usbos_qdeq(), I wonder why this function is needed.
- */
 static void
 dbus_usbos_req_del(urb_req_t *req, spinlock_t *lock)
 {
@@ -690,121 +557,68 @@ dbus_usbos_req_del(urb_req_t *req, spinlock_t *lock)
 }
 
 
-/**
- * Driver requires a pool of URBs to operate. This function is called during
- * initialization (attach phase), allocates a number of URBs, and puts them
- * on the free (req_rxfreeq and req_txfreeq) queue
- */
 static int
-dbus_usbos_urbreqs_alloc(usbos_info_t *usbos_info, uint32 count, bool is_rx)
+dbus_usbos_urbreqs_alloc(usbos_info_t *usbos_info)
 {
 	int i;
-	int allocated = 0;
-	int err = DBUS_OK;
 
-	for (i = 0; i < count; i++) {
+	DBUSTRACE(("%s: allocating URBs. ntxq %d nrxq %d\n", __FUNCTION__,
+		usbos_info->pub->ntxq, usbos_info->pub->nrxq));
+	for (i = 0; i < (usbos_info->pub->nrxq + usbos_info->pub->ntxq); i++) {
 		urb_req_t *req;
 
 		req = MALLOC(usbos_info->pub->osh, sizeof(urb_req_t));
 		if (req == NULL) {
-			DBUSERR(("%s: MALLOC req failed\n", __FUNCTION__));
-			err = DBUS_ERR_NOMEM;
-			goto fail;
+			/* dbus_usbos_urbreqs_free() takes care of partial
+			 * allocation
+			 */
+			DBUSERR(("%s: usb_alloc_urb failed\n", __FUNCTION__));
+			return DBUS_ERR_NOMEM;
 		}
 		bzero(req, sizeof(urb_req_t));
 
 		req->urb = USB_ALLOC_URB();
 		if (req->urb == NULL) {
-			DBUSERR(("%s: USB_ALLOC_URB req->urb failed\n", __FUNCTION__));
-			err = DBUS_ERR_NOMEM;
-			goto fail;
+			DBUSERR(("%s: usb_alloc_urb failed\n", __FUNCTION__));
+			return DBUS_ERR_NOMEM;
 		}
 
 		INIT_LIST_HEAD(&req->urb_list);
 
-		if (is_rx) {
 #if defined(BCM_RPC_NOCOPY) || defined(BCM_RPC_RXNOCOPY)
-			/* don't allocate now. Do it on demand */
-			req->pkt = NULL;
+		/* don't allocate now. Do it on demand */
+		req->pkt = NULL;
 #else
-			/* pre-allocate  buffers never to be released */
-			req->pkt = MALLOC(usbos_info->pub->osh, usbos_info->rxbuf_len);
-			if (req->pkt == NULL) {
-				DBUSERR(("%s: MALLOC req->pkt failed\n", __FUNCTION__));
-				err = DBUS_ERR_NOMEM;
-				goto fail;
-			}
-#endif
-			req->buf_len = usbos_info->rxbuf_len;
-			dbus_usbos_qenq(&usbos_info->req_rxfreeq, req, &usbos_info->rxfree_lock);
-		} else {
-			req->buf_len = 0;
-			dbus_usbos_qenq(&usbos_info->req_txfreeq, req, &usbos_info->txfree_lock);
+		/* pre-allocate  buffers never to be released */
+		req->pkt = MALLOC(usbos_info->pub->osh, usbos_info->rxbuf_len);
+		if (req->pkt == NULL) {
+			DBUSERR(("%s: usb_alloc_urb failed\n", __FUNCTION__));
+			return DBUS_ERR_NOMEM;
 		}
-		allocated++;
-		continue;
-
-fail:
-		if (req) {
-			if (is_rx && req->pkt) {
-#if defined(BCM_RPC_NOCOPY) || defined(BCM_RPC_RXNOCOPY)
-				/* req->pkt is NULL in "NOCOPY" mode */
-#else
-				MFREE(usbos_info->pub->osh, req->pkt, req->buf_len);
 #endif
-			}
-			if (req->urb) {
-				USB_FREE_URB(req->urb);
-			}
-			MFREE(usbos_info->pub->osh, req, sizeof(urb_req_t));
-		}
-		break;
+		req->buf_len = usbos_info->rxbuf_len;
+		dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 	}
 
-	atomic_add(allocated, is_rx ? &usbos_info->rxallocated : &usbos_info->txallocated);
-
-	if (is_rx) {
-		DBUSTRACE(("%s: add %d (total %d) rx buf, each has %d bytes\n", __FUNCTION__,
-			allocated, atomic_read(&usbos_info->rxallocated), usbos_info->rxbuf_len));
-	} else {
-		DBUSTRACE(("%s: add %d (total %d) tx req\n", __FUNCTION__,
-			allocated, atomic_read(&usbos_info->txallocated)));
-	}
-
-	return err;
+	return DBUS_OK;
 }
 
-/** Typically called during detach or when attach failed. Don't call until all URBs unlinked */
-static int
-dbus_usbos_urbreqs_free(usbos_info_t *usbos_info, bool is_rx)
+/* Don't call until all URBs unlinked */
+static void
+dbus_usbos_urbreqs_free(usbos_info_t *usbos_info)
 {
-	int rtn = 0;
 	urb_req_t *req;
-	struct list_head *req_q;
-	spinlock_t *lock;
 
-	if (is_rx) {
-		req_q = &usbos_info->req_rxfreeq;
-		lock = &usbos_info->rxfree_lock;
-	} else {
-		req_q = &usbos_info->req_txfreeq;
-		lock = &usbos_info->txfree_lock;
-	}
-	while ((req = dbus_usbos_qdeq(req_q, lock)) != NULL) {
+	while ((req = dbus_usbos_qdeq(&usbos_info->req_freeq,
+		&usbos_info->free_lock)) != NULL) {
 
-		if (is_rx) {
-			if (req->pkt) {
-				/* We do MFREE instead of PKTFREE because the pkt has been
-				 * converted to native already
-				 */
-				MFREE(usbos_info->pub->osh, req->pkt, req->buf_len);
-				req->pkt = NULL;
-				req->buf_len = 0;
-			}
-		}
-		else {
-			/* sending req should not be assigned pkt buffer */
-			ASSERT(req->pkt == NULL);
+		if (req->pkt) {
+			/* We do MFREE instead of PKTFREE because the pkt has been
+			 * converted to native already
+			 */
+			MFREE(usbos_info->pub->osh, req->pkt, req->buf_len);
+			req->pkt = NULL;
+			req->buf_len = 0;
 		}
 
 		if (req->urb) {
@@ -812,16 +626,9 @@ dbus_usbos_urbreqs_free(usbos_info_t *usbos_info, bool is_rx)
 			req->urb = NULL;
 		}
 		MFREE(usbos_info->pub->osh, req, sizeof(urb_req_t));
-
-		rtn++;
 	}
-	return rtn;
 }
 
-/**
- * called by Linux kernel on URB completion. Upper DBUS layer (dbus_usb.c) has to be notified of
- * send completion.
- */
 void
 dbus_usbos_send_complete(CALLBACK_ARGS)
 {
@@ -832,10 +639,6 @@ dbus_usbos_send_complete(CALLBACK_ARGS)
 	int status = DBUS_OK;
 
 	spin_lock_irqsave(&usbos_info->txlock, flags);
-
-	/* Enable USB autosuspend if no packets are being sent */
-	USB_AUTOPM_PUT_INTERFACE_ASYNC(g_probe_info.intf);
-
 	dbus_usbos_req_del(req, &usbos_info->txposted_lock);
 	usbos_info->txposted--;
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
@@ -854,26 +657,18 @@ dbus_usbos_send_complete(CALLBACK_ARGS)
 	}
 
 #if defined(BCM_RPC_NOCOPY) || defined(BCM_RPC_RXNOCOPY)
-	/* sending req should not be assigned pkt buffer */
-	ASSERT(req->pkt == NULL);
+	/* detach the packet from the req */
+	req->pkt = NULL;
 #endif
-	if (txirb->send_buf) {
-		MFREE(usbos_info->pub->osh, txirb->send_buf, req->buf_len);
-		txirb->send_buf = NULL;
-		req->buf_len = 0;
-	}
+	if (txirb->send_buf) kfree(txirb->send_buf);
 	if (likely (usbos_info->cbarg && usbos_info->cbs)) {
 		if (likely (usbos_info->cbs->send_irb_complete != NULL))
 			usbos_info->cbs->send_irb_complete(usbos_info->cbarg, txirb, status);
 	}
 
-	dbus_usbos_qenq(&usbos_info->req_txfreeq, req, &usbos_info->txfree_lock);
+	dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 }
 
-/**
- * In order to receive USB traffic from the dongle, we need to supply the Linux kernel with a free
- * URB that is going to contain received data.
- */
 static int BCMFASTPATH
 dbus_usbos_recv_urb_submit(usbos_info_t *usbos_info, dbus_irb_rx_t *rxirb, uint32 ep_idx)
 {
@@ -882,12 +677,9 @@ dbus_usbos_recv_urb_submit(usbos_info_t *usbos_info, dbus_irb_rx_t *rxirb, uint3
 	unsigned long flags;
 	void *p;
 	uint rx_pipe;
-	int rxposted;
 
-	BCM_REFERENCE(rxposted);
-
-	if (!(req = dbus_usbos_qdeq(&usbos_info->req_rxfreeq, &usbos_info->rxfree_lock))) {
-		DBUSTRACE(("%s No free URB!\n", __FUNCTION__));
+	if (!(req = dbus_usbos_qdeq(&usbos_info->req_freeq, &usbos_info->free_lock))) {
+		DBUSERR(("%s No free URB!\n", __FUNCTION__));
 		return DBUS_ERR_RXDROP;
 	}
 
@@ -897,7 +689,7 @@ dbus_usbos_recv_urb_submit(usbos_info_t *usbos_info, dbus_irb_rx_t *rxirb, uint3
 	req->pkt = rxirb->pkt = PKTGET(usbos_info->pub->osh, req->buf_len, FALSE);
 	if (!rxirb->pkt) {
 		DBUSERR(("%s: PKTGET failed\n", __FUNCTION__));
-		dbus_usbos_qenq(&usbos_info->req_rxfreeq, req, &usbos_info->rxfree_lock);
+		dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 		ret = DBUS_ERR_RXDROP;
 		goto fail;
 	}
@@ -927,14 +719,14 @@ dbus_usbos_recv_urb_submit(usbos_info_t *usbos_info, dbus_irb_rx_t *rxirb, uint3
 
 	if ((ret = USB_SUBMIT_URB(req->urb))) {
 		DBUSERR(("%s USB_SUBMIT_URB failed. status %d\n", __FUNCTION__, ret));
-		dbus_usbos_qenq(&usbos_info->req_rxfreeq, req, &usbos_info->rxfree_lock);
+		dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 		ret = DBUS_ERR_RXFAIL;
 		goto fail;
 	}
-	rxposted = atomic_inc_return(&usbos_info->rxposted);
+	usbos_info->rxposted++;
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
 	if (usbos_info->rxposted_hist) {
-		usbos_info->rxposted_hist[rxposted]++;
+		usbos_info->rxposted_hist[usbos_info->rxposted]++;
 	}
 #endif /* BCMDBG || DBUS_LINUX_HIST */
 
@@ -1005,7 +797,7 @@ fail:
 			usbos_info->cbs->recv_irb_complete) {
 			usbos_info->cbs->recv_irb_complete(usbos_info->cbarg, rxirb, dbus_status);
 		}
-		dbus_usbos_qenq(&usbos_info->req_rxfreeq, req, &usbos_info->rxfree_lock);
+		dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 	}
 
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
@@ -1048,37 +840,29 @@ dbus_usbos_dpc_thread(void *data)
 }
 #endif /* DBUS_LINUX_RXDPC */
 
-/* called by worked thread when a 'receive URB' completed */
-/* or Linux kernel when it returns a URB to this driver */
-static void BCMFASTPATH
+#ifdef USBOS_THREAD
+void
+dbus_usbos_recv_complete(CALLBACK_ARGS)
+{
+	dbus_usbos_dispatch_schedule(urb, regs);
+}
+
+void BCMFASTPATH
 dbus_usbos_recv_complete_handle(urb_req_t *req, int len, int status)
 {
 #ifdef DBUS_LINUX_RXDPC
 	usbos_info_t *usbos_info = req->usbinfo;
 	unsigned long flags;
-	int rxallocated, rxposted;
 
 	spin_lock_irqsave(&usbos_info->rxlock, flags);
 	/* detach the packet from the queue */
 	dbus_usbos_req_del(req, &usbos_info->rxposted_lock);
-	rxposted = atomic_dec_return(&usbos_info->rxposted);
-	rxallocated = atomic_read(&usbos_info->rxallocated);
+	usbos_info->rxposted--;
 
 	/* Enqueue to rxpending queue */
 	usbos_info->rxpending++;
 	dbus_usbos_qenq(&usbos_info->req_rxpendingq, req, &usbos_info->rxpending_lock);
 	spin_unlock_irqrestore(&usbos_info->rxlock, flags);
-
-#error "RX req/buf appending-mode not verified for DBUS_LINUX_RXDPC because it was disabled"
-	if ((rxallocated < usbos_info->pub->nrxq) && (!status) &&
-		(rxposted == DBUS_USB_RXQUEUE_LOWER_WATERMARK)) {
-			DBUSTRACE(("%s: need more rx buf: rxallocated %d rxposted %d!\n",
-				__FUNCTION__, rxallocated, rxposted));
-			dbus_usbos_urbreqs_alloc(usbos_info,
-				MIN(DBUS_USB_RXQUEUE_BATCH_ADD,
-				usbos_info->pub->nrxq - rxallocated), TRUE);
-	}
-#error "Please verify above code works if you happened to enable DBUS_LINUX_RXDPC!!"
 
 	/* Wake up dpc for further processing */
 	ASSERT(usbos_info->dpc_pid >= 0);
@@ -1087,24 +871,13 @@ dbus_usbos_recv_complete_handle(urb_req_t *req, int len, int status)
 	dbus_irb_rx_t *rxirb = req->arg;
 	usbos_info_t *usbos_info = req->usbinfo;
 	unsigned long flags;
-	int rxallocated, rxposted;
 	int dbus_status = DBUS_OK;
 	bool killed = (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING) ? 1 : 0;
 
 	spin_lock_irqsave(&usbos_info->rxlock, flags);
 	dbus_usbos_req_del(req, &usbos_info->rxposted_lock);
-	rxposted = atomic_dec_return(&usbos_info->rxposted);
-	rxallocated = atomic_read(&usbos_info->rxallocated);
+	usbos_info->rxposted--;
 	spin_unlock_irqrestore(&usbos_info->rxlock, flags);
-
-	if ((rxallocated < usbos_info->pub->nrxq) && (!status) &&
-		(rxposted == DBUS_USB_RXQUEUE_LOWER_WATERMARK)) {
-			DBUSTRACE(("%s: need more rx buf: rxallocated %d rxposted %d!\n",
-				__FUNCTION__, rxallocated, rxposted));
-			dbus_usbos_urbreqs_alloc(usbos_info,
-				MIN(DBUS_USB_RXQUEUE_BATCH_ADD,
-				usbos_info->pub->nrxq - rxallocated), TRUE);
-	}
 
 	/* Handle errors */
 	if (status) {
@@ -1130,11 +903,6 @@ dbus_usbos_recv_complete_handle(urb_req_t *req, int len, int status)
 		goto fail;
 	}
 
-#ifndef USBOS_THREAD
-	/* Mark the interface as busy to reset USB autosuspend timer */
-	USB_MARK_LAST_BUSY(usbos_info->usb);
-#endif
-
 	/* Make the skb represent the received urb */
 	rxirb->actual_len = len;
 fail:
@@ -1149,23 +917,89 @@ fail:
 		}
 	}
 
-	dbus_usbos_qenq(&usbos_info->req_rxfreeq, req, &usbos_info->rxfree_lock);
+	dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 #endif /* DBUS_LINUX_RXDPC */
 }
 
-/** called by Linux kernel when it returns a URB to this driver */
-static void
+
+#else /*  !USBOS_THREAD */
+void BCMFASTPATH
 dbus_usbos_recv_complete(CALLBACK_ARGS)
 {
-#ifdef USBOS_THREAD
-	dbus_usbos_dispatch_schedule(CALLBACK_ARGS_DATA);
-#else /*  !USBOS_THREAD */
-	dbus_usbos_recv_complete_handle(urb->context, urb->actual_length, urb->status);
-#endif /*  USBOS_THREAD */
+#ifdef DBUS_LINUX_RXDPC
+	urb_req_t *req = urb->context;
+	usbos_info_t *usbos_info = req->usbinfo;
+	unsigned long flags;
+
+	spin_lock_irqsave(&usbos_info->rxlock, flags);
+	/* detach the packet from the queue */
+	dbus_usbos_req_del(req, &usbos_info->rxposted_lock);
+	usbos_info->rxposted--;
+
+	/* Enqueue to rxpending queue */
+	usbos_info->rxpending++;
+	dbus_usbos_qenq(&usbos_info->req_rxpendingq, req, &usbos_info->rxpending_lock);
+	spin_unlock_irqrestore(&usbos_info->rxlock, flags);
+
+	/* Wake up dpc for further processing */
+	ASSERT(usbos_info->dpc_pid >= 0);
+	up(&usbos_info->dpc_sem);
+#else
+	urb_req_t *req = urb->context;
+	dbus_irb_rx_t *rxirb = req->arg;
+	usbos_info_t *usbos_info = req->usbinfo;
+	unsigned long flags;
+	int dbus_status = DBUS_OK;
+	bool killed = (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING) ? 1 : 0;
+
+	spin_lock_irqsave(&usbos_info->rxlock, flags);
+	dbus_usbos_req_del(req, &usbos_info->rxposted_lock);
+	usbos_info->rxposted--;
+	spin_unlock_irqrestore(&usbos_info->rxlock, flags);
+
+	/* Handle errors */
+	if (urb->status) {
+		/*
+		 * Linux 2.4 disconnect: -ENOENT or -EILSEQ for CRC error; rmmod: -ENOENT
+		 * Linux 2.6 disconnect: -EPROTO, rmmod: -ESHUTDOWN
+		 */
+		if ((urb->status == -ENOENT && (!killed))|| urb->status == -ESHUTDOWN) {
+			/* NOTE: unlink() can not be called from URB callback().
+			 * Do not call dbusos_stop() here.
+			 */
+			dbus_usbos_state_change(usbos_info, DBUS_STATE_DOWN);
+		} else if (urb->status == -EPROTO) {
+		} else {
+			DBUSTRACE(("%s rx error %d\n", __FUNCTION__, urb->status));
+			dbus_usbos_errhandler(usbos_info, DBUS_ERR_RXFAIL);
+		}
+
+		/* On error, don't submit more URBs yet */
+		rxirb->buf = NULL;
+		rxirb->actual_len = 0;
+		dbus_status = DBUS_ERR_RXFAIL;
+		goto fail;
+	}
+
+	/* Make the skb represent the received urb */
+	rxirb->actual_len = urb->actual_length;
+fail:
+#if defined(BCM_RPC_NOCOPY) || defined(BCM_RPC_RXNOCOPY)
+	/* detach the packet from the queue */
+	req->pkt = NULL;
+#endif /* BCM_RPC_NOCOPY || BCM_RPC_RXNOCOPY */
+
+	if (usbos_info->cbarg && usbos_info->cbs) {
+		if (usbos_info->cbs->recv_irb_complete) {
+			usbos_info->cbs->recv_irb_complete(usbos_info->cbarg, rxirb, dbus_status);
+		}
+	}
+	dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
+#endif /* DBUS_LINUX_RXDPC */
 }
+#endif /*  USBOS_THREAD */
 
 #if (defined(WLC_HIGH) && defined(WLC_LOW))
-/** called by Linux kernel on URB completion */
 static void
 dbus_usbos_intr_complete(CALLBACK_ARGS)
 {
@@ -1196,10 +1030,6 @@ dbus_usbos_intr_complete(CALLBACK_ARGS)
 }
 #endif	/* (defined(WLC_HIGH) && defined(WLC_LOW)) */
 
-/**
- * If Linux notifies our driver that a control read or write URB has completed, we should notify
- * the DBUS layer above us (dbus_usb.c in this case).
- */
 static void
 dbus_usbos_ctl_complete(usbos_info_t *usbos_info, int type, int urbstatus)
 {
@@ -1215,17 +1045,9 @@ dbus_usbos_ctl_complete(usbos_info_t *usbos_info, int type, int urbstatus)
 		case -EINPROGRESS:
 		case -ENOENT:
 		default:
-#ifdef INTR_EP_ENABLE
-			DBUSERR(("%s:%d fail status %d bus:%d susp:%d intr:%d ctli:%d ctlo:%d\n",
-				__FUNCTION__, type, urbstatus,
-				usbos_info->pub->busstate, g_probe_info.suspend_state,
-				usbos_info->intr_urb_submitted, usbos_info->ctlin_urb_submitted,
-				usbos_info->ctlout_urb_submitted));
-#else
 			DBUSERR(("%s: failed with status %d\n", __FUNCTION__, urbstatus));
 			status = DBUS_ERR;
 		break;
-#endif /* INTR_EP_ENABLE */
 	}
 
 	if (usbos_info->cbarg && usbos_info->cbs) {
@@ -1234,7 +1056,6 @@ dbus_usbos_ctl_complete(usbos_info_t *usbos_info, int type, int urbstatus)
 	}
 }
 
-/** called by Linux */
 static void
 dbus_usbos_ctlread_complete(CALLBACK_ARGS)
 {
@@ -1260,7 +1081,6 @@ dbus_usbos_ctlread_complete(CALLBACK_ARGS)
 #endif
 }
 
-/** called by Linux */
 static void
 dbus_usbos_ctlwrite_complete(CALLBACK_ARGS)
 {
@@ -1281,34 +1101,6 @@ dbus_usbos_ctlwrite_complete(CALLBACK_ARGS)
 #endif
 }
 
-#ifdef INTR_EP_ENABLE
-/** called by Linux */
-static void
-dbus_usbos_intr_complete(CALLBACK_ARGS)
-{
-	usbos_info_t *usbos_info = (usbos_info_t *)urb->context;
-	bool killed = (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING) ? 1 : 0;
-
-	if (usbos_info == NULL || usbos_info->pub == NULL)
-		return;
-	if ((urb->status == -ENOENT && (!killed)) || urb->status == -ESHUTDOWN ||
-		urb->status == -ENODEV) {
-		dbus_usbos_state_change(usbos_info, DBUS_STATE_DOWN);
-	}
-
-	if (usbos_info->pub->busstate == DBUS_STATE_DOWN) {
-		DBUSERR(("%s: intr cb when DBUS down, ignoring\n", __FUNCTION__));
-		return;
-	}
-	dbus_usbos_ctl_complete(usbos_info, DBUS_CBINTR_POLL, urb->status);
-}
-#endif	/* INTR_EP_ENABLE */
-
-/**
- * when the bus is going to sleep or halt, the Linux kernel requires us to take ownership of our
- * URBs again. Multiple code paths in this file require a list of URBs to be cancelled in a
- * concurrency save manner.
- */
 static void
 dbus_usbos_unlink(struct list_head *urbreq_q, spinlock_t *lock)
 {
@@ -1321,39 +1113,10 @@ dbus_usbos_unlink(struct list_head *urbreq_q, spinlock_t *lock)
 	}
 }
 
-/** multiple code paths in this file require the bus to stop */
-static void
-dbus_usbos_cancel_all_urbs(usbos_info_t *usbos_info)
-{
-	DBUSTRACE(("%s: unlink all URBs\n", __FUNCTION__));
-
-	/* tell Linux kernel to cancel a single intr, ctl and blk URB */
-	if (usbos_info->intr_urb)
-		USB_UNLINK_URB(usbos_info->intr_urb);
-	if (usbos_info->ctl_urb)
-		USB_UNLINK_URB(usbos_info->ctl_urb);
-	if (usbos_info->blk_urb)
-		USB_UNLINK_URB(usbos_info->blk_urb);
-
-	dbus_usbos_unlink(&usbos_info->req_txpostedq, &usbos_info->txposted_lock);
-	if (usbos_info->txposted > 0) {
-		DBUSERR(("%s ERROR: tx REQs posted=%d in stop!\n", __FUNCTION__,
-			usbos_info->txposted));
-	}
-
-	dbus_usbos_unlink(&usbos_info->req_rxpostedq, &usbos_info->rxposted_lock);
-	if (atomic_read(&usbos_info->rxposted) > 0) {
-		DBUSERR(("%s ERROR: rx REQs posted=%d!\n", __FUNCTION__,
-			atomic_read(&usbos_info->rxposted)));
-	}
-}
-
-/** multiple code paths require the bus to stop */
 static void
 dbusos_stop(usbos_info_t *usbos_info)
 {
 	urb_req_t *req;
-	int rxposted;
 	req = NULL;
 	BCM_REFERENCE(req);
 
@@ -1363,25 +1126,38 @@ dbusos_stop(usbos_info_t *usbos_info)
 	dbus_usbos_ctl_send_debugtrig(usbos_info);
 #endif /* USB_TRIGGER_DEBUG */
 	dbus_usbos_state_change(usbos_info, DBUS_STATE_DOWN);
+	DBUSTRACE(("%s: unlink all URBs\n", __FUNCTION__));
+	if (usbos_info->intr_urb)
+		USB_UNLINK_URB(usbos_info->intr_urb);
 
-	dbus_usbos_cancel_all_urbs(usbos_info);
+	if (usbos_info->ctl_urb)
+		USB_UNLINK_URB(usbos_info->ctl_urb);
+
+	if (usbos_info->blk_urb)
+		USB_UNLINK_URB(usbos_info->blk_urb);
+
+	dbus_usbos_unlink(&usbos_info->req_txpostedq, &usbos_info->txposted_lock);
+	if (usbos_info->txposted > 0) {
+		DBUSERR(("%s ERROR: tx REQs posted=%d in stop!\n", __FUNCTION__,
+			usbos_info->txposted));
+	}
+	dbus_usbos_unlink(&usbos_info->req_rxpostedq, &usbos_info->rxposted_lock);
 
 #ifdef USBOS_THREAD
 	/* yield the CPU to rx packet thread */
 	while (1) {
 		if (atomic_read(&usbos_info->usbos_list_cnt) <= 0)	break;
 		wake_up_interruptible(&usbos_info->usbos_queue_head);
-		OSL_SLEEP(3);
+		msleep(3);
 	}
 #endif /* USBOS_THREAD */
 
-	rxposted = atomic_read(&usbos_info->rxposted);
-	if (rxposted > 0) {
+	if (usbos_info->rxposted > 0) {
 		DBUSERR(("%s ERROR: rx REQs posted=%d in stop!\n", __FUNCTION__,
-			rxposted));
+			usbos_info->rxposted));
 	}
 
-	ASSERT(usbos_info->txposted == 0 && rxposted == 0);
+	ASSERT(usbos_info->txposted == 0 && usbos_info->rxposted == 0);
 
 #ifdef DBUS_LINUX_RXDPC
 	/* Stop the dpc thread */
@@ -1393,80 +1169,37 @@ dbusos_stop(usbos_info_t *usbos_info)
 	/* Move pending reqs to free queue so they can be freed */
 	while ((req = dbus_usbos_qdeq(&usbos_info->req_rxpendingq,
 		&usbos_info->rxpending_lock)) != NULL) {
-		dbus_usbos_qenq(&usbos_info->req_rxfreeq, req,
-			&usbos_info->rxfree_lock);
+		dbus_usbos_qenq(&usbos_info->req_freeq, req,
+			&usbos_info->free_lock);
 	}
 #endif /* DBUS_LINUX_RXDPC */
 }
 
-#if defined(USB_SUSPEND_AVAILABLE)
-
-/**
- * Linux kernel sports a 'USB auto suspend' feature. See: http://lwn.net/Articles/373550/
- * The suspend method is called by the Linux kernel to warn the driver that the device is going to
- * be suspended.  If the driver returns a negative error code, the suspend will be aborted. If the
- * driver returns 0, it must cancel all outstanding URBs (usb_kill_urb()) and not submit any more.
- */
+#ifdef KERNEL26
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) \
+	&& (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 38))
 static int
 dbus_usbos_suspend(struct usb_interface *intf,
             pm_message_t message)
 {
 	DBUSERR(("%s suspend state: %d\n", __FUNCTION__, g_probe_info.suspend_state));
-#if !defined(WLC_HIGH) && !defined(WLC_LOW)
-	/* DHD for full dongle model */
-	g_probe_info.suspend_state = USBOS_SUSPEND_STATE_SUSPEND_PENDING;
-	dbus_usbos_state_change((usbos_info_t*)g_probe_info.usbos_info, DBUS_STATE_SLEEP);
-	dbus_usbos_cancel_all_urbs((usbos_info_t*)g_probe_info.usbos_info);
-	g_probe_info.suspend_state = USBOS_SUSPEND_STATE_SUSPENDED;
-
-	return 0;
-#else
-	/* BMAC driver */
-	if (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING ||
-        (message.event & PM_EVENT_AUTO) == 0) {   /* never block system suspend */
+	if (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING) {
 		g_probe_info.suspend_state = USBOS_SUSPEND_STATE_SUSPENDED;
 		return 0;
 	}
 	else {
 		return -EBUSY;
 	}
-#endif /* WLC_HIGH / WLC_LOW */
 }
 
-/**
- * The resume method is called to tell the driver that the device has been resumed and the driver
- * can return to normal operation.  URBs may once more be submitted.
- */
 static int dbus_usbos_resume(struct usb_interface *intf)
 {
 	DBUSERR(("%s Device resumed\n", __FUNCTION__));
-
-	dbus_usbos_state_change((usbos_info_t*)g_probe_info.usbos_info, DBUS_STATE_UP);
 	g_probe_info.suspend_state = USBOS_SUSPEND_STATE_DEVICE_ACTIVE;
 	return 0;
 }
+#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) */
 
-#if !defined(WLC_HIGH) && !defined(WLC_LOW)
-/**
-* This function is directly called by the Linux kernel, when the suspended device has been reset
-* instead of being resumed
-*/
-static int dbus_usbos_reset_resume(struct usb_interface *intf)
-{
-	DBUSERR(("%s Device reset resumed\n", __FUNCTION__));
-	g_probe_info.suspend_state = USBOS_SUSPEND_STATE_DEVICE_ACTIVE;
-	return 0;
-}
-#endif /* WLC_HIGH / WLC_LOW */
-
-#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(USB_SUSPEND_AVAILABLE)) */
-
-/**
- * Called by Linux kernel at initialization time, kernel wants to know if our driver will accept the
- * caller supplied USB interface. Note that USB drivers are bound to interfaces, and not to USB
- * devices.
- */
-#ifdef KERNEL26
 static int
 dbus_usbos_probe(struct usb_interface *intf, const struct usb_device_id *id)
 #else
@@ -1511,7 +1244,7 @@ dbus_usbos_probe(struct usb_device *usb, unsigned int ifnum, const struct usb_de
 #endif /* KERNEL26 */
 
 #ifdef BCMUSBDEV_COMPOSITE
-	if (IFDESC(usb, wlan_if).bInterfaceNumber > USB_COMPIF_MAX) {
+	if (IFDESC(usb, wlan_if).bInterfaceNumber < 0) {
 #else
 	if (IFDESC(usb, CONTROL_IF).bInterfaceNumber) {
 #endif /* BCMUSBDEV_COMPOSITE */
@@ -1695,9 +1428,7 @@ dbus_usbos_probe(struct usb_device *usb, unsigned int ifnum, const struct usb_de
 #ifdef BCMUSBDEV_COMPOSITE
 	g_probe_info.intr_size = (IFEPDESC(usb, wlan_if, 0).wMaxPacketSize == 16) ? 8 : 4;
 	g_probe_info.interval = IFEPDESC(usb, wlan_if, 0).bInterval;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21))
 	usb->quirks |= USB_QUIRK_NO_SET_INTF;
-#endif
 #else
 	g_probe_info.intr_size = (IFEPDESC(usb, CONTROL_IF, 0).wMaxPacketSize == 16) ? 8 : 4;
 	g_probe_info.interval = IFEPDESC(usb, CONTROL_IF, 0).bInterval;
@@ -1708,17 +1439,14 @@ dbus_usbos_probe(struct usb_device *usb, unsigned int ifnum, const struct usb_de
 	if (usb->speed == USB_SPEED_HIGH)
 		g_probe_info.interval = 1 << (g_probe_info.interval - 1);
 #endif
-	if (usb->speed == USB_SPEED_SUPER) {
-		g_probe_info.device_speed = SUPER_SPEED;
-		DBUSERR(("super speed device detected\n"));
-	} else if (usb->speed == USB_SPEED_HIGH) {
+	if (usb->speed == USB_SPEED_HIGH) {
 		g_probe_info.device_speed = HIGH_SPEED;
 		DBUSERR(("high speed device detected\n"));
 	} else {
 		g_probe_info.device_speed = FULL_SPEED;
 		DBUSERR(("full speed device detected\n"));
 	}
-	if (g_probe_info.dereged == FALSE && probe_cb) {
+	if (probe_cb) {
 		disc_arg = probe_cb(probe_arg, "", USB_BUS, 0);
 	}
 
@@ -1754,7 +1482,6 @@ fail:
 #endif
 }
 
-/** Called by Linux kernel, is the counter part of dbus_usbos_probe() */
 #ifdef KERNEL26
 static void
 dbus_usbos_disconnect(struct usb_interface *intf)
@@ -1771,30 +1498,30 @@ dbus_usbos_disconnect(struct usb_device *usb, void *ptr)
 #endif
 	usbos_info_t *usbos_info;
 
-	if (probe_usb_init_data) {
-		usbos_info = (usbos_info_t *) probe_usb_init_data->usbos_info;
-		if (usbos_info) {
-			if ((probe_usb_init_data->dereged == FALSE) && disconnect_cb && disc_arg) {
-				disconnect_cb(disc_arg);
-				disc_arg = NULL;
-				probe_usb_init_data->disc_cb_done = TRUE;
-			}
+	if ((probe_usb_init_data == NULL) || (usb == NULL)) {
+		/* Should never happen */
+		ASSERT(0);
+		return;
+	}
+
+	usbos_info = (usbos_info_t *) probe_usb_init_data->usbos_info;
+	if (usbos_info) {
+		if ((probe_usb_init_data->dereged == FALSE) && disconnect_cb) {
+			disconnect_cb(disc_arg);
+			probe_usb_init_data->disc_cb_done = TRUE;
 		}
 	}
 
-	if (usb) {
 #ifndef KERNEL26
 #ifdef BCMUSBDEV_COMPOSITE
-		usb_driver_release_interface(&dbus_usbdev, IFPTR(usb, wlan_if));
+	usb_driver_release_interface(&dbus_usbdev, IFPTR(usb, wlan_if));
 #else
-		usb_driver_release_interface(&dbus_usbdev, IFPTR(usb, CONTROL_IF));
+	usb_driver_release_interface(&dbus_usbdev, IFPTR(usb, CONTROL_IF));
 #endif /* BCMUSBDEV_COMPOSITE */
-		usb_dec_dev_use(usb);
+	usb_dec_dev_use(usb);
 #endif /* !KERNEL26 */
-	}
 }
 
-/** Higher layer (dbus_usb.c) wants to transmit an I/O Request Block */
 static int
 dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 {
@@ -1807,16 +1534,12 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 	if (usbos_info == NULL)
 		return DBUS_ERR;
 
-	if (!(req = dbus_usbos_qdeq(&usbos_info->req_txfreeq, &usbos_info->txfree_lock))) {
+	if (!(req = dbus_usbos_qdeq(&usbos_info->req_freeq, &usbos_info->free_lock))) {
 		DBUSERR(("%s No free URB!\n", __FUNCTION__));
 		return DBUS_ERR_TXDROP;
 	}
 
 	spin_lock_irqsave(&usbos_info->txlock, flags);
-
-	/* Disable USB autosuspend while packets are sent, and request USB resume if needed */
-	USB_AUTOPM_GET_INTERFACE_ASYNC(g_probe_info.intf);
-
 	req->arg = txirb;
 	req->usbinfo = usbos_info;
 
@@ -1827,25 +1550,28 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 	} else if (txirb->pkt) {
 		uint32 len = 0, pktlen = 0;
 		void *transfer_buf;
-
+#ifdef WL_USB_ZLP_PAD
 		uint32	zlpflag = 0;
-
+#endif
 		len = pkttotlen(usbos_info->pub->osh, txirb->pkt);
 		/* check the length and change if not 4 bytes aligned. */
 		len	= ROUNDUP(len, sizeof(uint32));
-#if defined(WL_USB_ZLP_PAD) || defined(BCM_FD_AGGR)
+#ifdef WL_USB_ZLP_PAD
 		zlpflag = !(len % BCM_USB_HOST_TOTALLEN_ZLP);
-#endif
 		/* the single packets which need ZLP are also processed here */
-		if (PKTNEXT(usbos_info->pub->osh, txirb->pkt) || zlpflag) {
+		if (PKTNEXT(osbos_info->pub->osh, txirb->pkt) || zlpflag)
+#else
+		if (PKTNEXT(osbos_info->pub->osh, txirb->pkt))
+#endif
+		{
 
-#if defined(WL_USB_ZLP_PAD) || defined(BCM_FD_AGGR)
+#ifdef WL_USB_ZLP_PAD
 			if (zlpflag) {
 				/* create space for pad bytes */
 				len += BCM_USB_HOST_TOTALLEN_ZLP_PAD;
 			}
 #endif
-			transfer_buf = MALLOC(usbos_info->pub->osh, len);
+			transfer_buf = kmalloc(len, GFP_ATOMIC);
 			if (!transfer_buf) {
 				ret = DBUS_ERR_TXDROP;
 				DBUSERR(("fail to alloc to usb buffer\n"));
@@ -1854,8 +1580,6 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 
 			pkt = txirb->pkt;
 			txirb->send_buf = transfer_buf;
-			req->buf_len = len;
-
 			while (pkt) {
 				pktlen = PKTLEN(usbos_info->pub->osh, pkt);
 				bcopy(PKTDATA(usbos_info->pub->osh, pkt), transfer_buf, pktlen);
@@ -1863,12 +1587,13 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 				pkt = PKTNEXT(usbos_info->pub->osh, pkt);
 			}
 
+#ifdef WL_USB_ZLP_PAD
 			if (zlpflag) {
 				/* set the value of pad bytes to zero */
 				bzero(txirb->send_buf +(len - BCM_USB_HOST_TOTALLEN_ZLP_PAD),
 					BCM_USB_HOST_TOTALLEN_ZLP_PAD);
 			}
-
+#endif
 			usb_fill_bulk_urb(req->urb, usbos_info->usb, usbos_info->tx_pipe,
 				txirb->send_buf,
 				len,
@@ -1876,7 +1601,6 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 
 		} else {
 			txirb->send_buf = NULL;
-			req->buf_len = 0;
 			len = PKTLEN(usbos_info->pub->osh, txirb->pkt);
 			len = ROUNDUP(len, sizeof(uint32));
 			usb_fill_bulk_urb(req->urb, usbos_info->usb, usbos_info->tx_pipe,
@@ -1891,11 +1615,9 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 	req->urb->transfer_flags |= URB_QUEUE_BULK;
 
 	if ((ret = USB_SUBMIT_URB(req->urb))) {
-		dbus_usbos_qenq(&usbos_info->req_txfreeq, req, &usbos_info->txfree_lock);
+		dbus_usbos_qenq(&usbos_info->req_freeq, req, &usbos_info->free_lock);
 		if (txirb->send_buf) {
-			MFREE(usbos_info->pub->osh, txirb->send_buf, req->buf_len);
-			txirb->send_buf = NULL;
-			req->buf_len = 0;
+			kfree(txirb->send_buf);
 		}
 		ret = DBUS_ERR_TXDROP;
 		goto fail;
@@ -1904,18 +1626,11 @@ dbus_usbos_intf_send_irb(void *bus, dbus_irb_tx_t *txirb)
 	usbos_info->txposted++;
 
 	dbus_usbos_qenq(&usbos_info->req_txpostedq, req, &usbos_info->txposted_lock);
-
-	spin_unlock_irqrestore(&usbos_info->txlock, flags);
-	return ret;
 fail:
-	/* Enable USB autosuspend if no packets are being sent */
-	USB_AUTOPM_PUT_INTERFACE_ASYNC(g_probe_info.intf);
-
 	spin_unlock_irqrestore(&usbos_info->txlock, flags);
 	return ret;
 }
 
-/** Higher layer (dbus_usb.c) recycles a received (and used) packet. */
 static int
 dbus_usbos_intf_recv_irb(void *bus, dbus_irb_rx_t *rxirb)
 {
@@ -1938,29 +1653,9 @@ dbus_usbos_intf_recv_irb_from_ep(void *bus, dbus_irb_rx_t *rxirb, uint32 ep_idx)
 	if (usbos_info == NULL)
 		return DBUS_ERR;
 
-#ifdef INTR_EP_ENABLE
-		/* By specifying the ep_idx value of 0xff, the cdc layer is asking to
-		* submit an interrupt URB
-		*/
-		if (rxirb == NULL && ep_idx == 0xff) {
-			/* submit intr URB */
-			if ((ret = USB_SUBMIT_URB(usbos_info->intr_urb)) < 0) {
-				DBUSERR(("%s intr USB_SUBMIT_URB failed, status %d\n",
-					__FUNCTION__, ret));
-			}
-			return ret;
-		}
-#else
-		if (rxirb == NULL) {
-			return DBUS_ERR;
-		}
-#endif /* INTR_EP_ENABLE */
-
 	ret = dbus_usbos_recv_urb_submit(usbos_info, rxirb, ep_idx);
 	return ret;
 }
-
-/** Higher layer (dbus_usb.c) want to cancel an IRB */
 static int
 dbus_usbos_intf_cancel_irb(void *bus, dbus_irb_tx_t *txirb)
 {
@@ -2004,7 +1699,6 @@ dbus_usbos_intf_send_ctl(void *bus, uint8 *buf, int len)
 	return DBUS_OK;
 }
 
-/** This function does not seem to be called by anyone, including dbus_usb.c */
 static int
 dbus_usbos_intf_recv_ctl(void *bus, uint8 *buf, int len)
 {
@@ -2083,7 +1777,6 @@ dbus_usbos_intf_get_attrib(void *bus, dbus_attrib_t *attrib)
 	return DBUS_OK;
 }
 
-/** Called by higher layer (dbus_usb.c) when it wants to 'up' the USB interface to the dongle */
 static int
 dbus_usbos_intf_up(void *bus)
 {
@@ -2098,7 +1791,7 @@ dbus_usbos_intf_up(void *bus)
 	if (usbos_info->usb == NULL)
 		return DBUS_ERR;
 
-#if defined(INTR_EP_ENABLE) || (defined(WLC_HIGH) && defined(WLC_LOW))
+#if (defined(WLC_HIGH) && defined(WLC_LOW))
 	/* full dongle use intr EP, bmac doesn't use it */
 	if (usbos_info->intr_urb) {
 		int ret;
@@ -2175,13 +1868,12 @@ static void
 dbus_usbos_intf_dump(void *bus, struct bcmstrbuf *b)
 {
 	usbos_info_t *usbos_info = (usbos_info_t *) bus;
-	int i = 0, j = 0, rxposted;
+	int i = 0, j = 0;
 
-	rxposted = atomic_read(&usbos_info->rxposted);
 	if (b) {
 		bcm_bprintf(b, "\ndbus linux dump\n");
 		bcm_bprintf(b, "txposted %d rxposted %d\n",
-			usbos_info->txposted, rxposted);
+			usbos_info->txposted, usbos_info->rxposted);
 
 		bcm_bprintf(b, "RXDPC: dpc_cnt %d dpc_pktcnt %d dpc_maxpktcnt %d avg_dpc_pktcnt\n",
 			usbos_info->dpc_cnt, usbos_info->dpc_pktcnt,
@@ -2193,7 +1885,7 @@ dbus_usbos_intf_dump(void *bus, struct bcmstrbuf *b)
 	} else {
 		printf("\ndbus linux dump\n");
 		printf("txposted %d rxposted %d\n",
-			usbos_info->txposted, rxposted);
+			usbos_info->txposted, usbos_info->rxposted);
 		printf("RXDPC: dpc_cnt %d dpc_pktcnt %d dpc_maxpktcnt %d avg_dpc_pktcnt %d\n",
 			usbos_info->dpc_cnt, usbos_info->dpc_pktcnt,
 			usbos_info->dpc_maxpktcnt, usbos_info->dpc_cnt ?
@@ -2254,60 +1946,15 @@ dbus_usbos_intf_dump(void *bus, struct bcmstrbuf *b)
 }
 #endif /* BCMDBG || DBUS_LINUX_HIST */
 
-/** Called by higher layer (dbus_usb.c) */
 static int
 dbus_usbos_intf_set_config(void *bus, dbus_config_t *config)
 {
-	int err = DBUS_ERR;
 	usbos_info_t* usbos_info = bus;
 
-	if (config->config_id == DBUS_CONFIG_ID_RXCTL_DEFERRES) {
-		usbos_info->rxctl_deferrespok = config->rxctl_deferrespok;
-		err = DBUS_OK;
-	} else if (config->config_id == DBUS_CONFIG_ID_TXRXQUEUE) {
-		/* DBUS_CONFIG_ID_TXRXQUEUE shouldn't be called after probe stage */
-		ASSERT(disc_arg == NULL);
-		ASSERT(config->txrxqueue.maxrxq > 0);
-		ASSERT(config->txrxqueue.rxbufsize > 0);
-		if (config->txrxqueue.rxbufsize != usbos_info->rxbuf_len) {
-			int freed;
-			int state = usbos_info->pub->busstate;
-
-			dbus_usbos_unlink(&usbos_info->req_rxpostedq, &usbos_info->rxposted_lock);
-			while (atomic_read(&usbos_info->rxposted)) {
-				DBUSTRACE(("%s rxposted is %d, delay 1 ms\n", __FUNCTION__,
-					atomic_read(&usbos_info->rxposted)));
-				dbus_usbos_wait(usbos_info, 1);
-			}
-
-			freed = dbus_usbos_urbreqs_free(usbos_info, TRUE);
-			ASSERT(freed == atomic_read(&usbos_info->rxallocated));
-			BCM_REFERENCE(freed);
-			atomic_set(&usbos_info->rxallocated, 0);
-			usbos_info->rxbuf_len = config->txrxqueue.rxbufsize;
-			if (DBUS_OK != dbus_usbos_urbreqs_alloc(usbos_info,
-#ifdef CTFPOOL
-				usbos_info->pub->nrxq,
-#else
-				MIN(DBUS_USB_RXQUEUE_BATCH_ADD, usbos_info->pub->nrxq),
-#endif
-				TRUE)) {
-				goto fail;
-			}
-			dbus_usbos_state_change(usbos_info, state);
-		}
-
-		err = DBUS_OK;
-	}
-
-fail:
-	return err;
+	usbos_info->rxctl_deferrespok = config->rxctl_deferrespok;
+	return DBUS_OK;
 }
 
-/**
- * In some cases, the code must submit an URB and wait for its completion.
- * Related: dbus_usbos_sync_complete()
- */
 static int
 dbus_usbos_sync_wait(usbos_info_t *usbinfo, uint16 time)
 {
@@ -2328,10 +1975,6 @@ dbus_usbos_sync_wait(usbos_info_t *usbinfo, uint16 time)
 	return err;
 }
 
-/**
- * In some cases, the code must submit an URB and wait for its completion.
- * Related: dbus_usbos_sync_wait()
- */
 static void
 dbus_usbos_sync_complete(CALLBACK_ARGS)
 {
@@ -2347,18 +1990,7 @@ dbus_usbos_sync_complete(CALLBACK_ARGS)
 	}
 }
 
-static int
-dbus_usbos_intf_set_device_speed(void *bus, uint8 speed)
-{
-	usbos_info_t* usbinfo = bus;
 
-	DBUSTRACE(("%s\n", __FUNCTION__));
-
-	dbus_usbos_dl_cmd(usbinfo, DL_CHGSPD, &speed, sizeof(uint8));
-	return DBUS_OK;
-}
-
-/** Called by dbus_usb.c when it wants to download firmware into the dongle */
 bool
 dbus_usbos_dl_cmd(usbos_info_t *usbinfo, uint8 cmd, void *buffer, int buflen)
 {
@@ -2386,12 +2018,6 @@ dbus_usbos_dl_cmd(usbos_info_t *usbinfo, uint8 cmd, void *buffer, int buflen)
 		USB_RECIP_INTERFACE;
 	usbinfo->ctl_read.bRequest = cmd;
 
-	if (cmd == DL_CHGSPD) {
-		usbinfo->ctl_read.bRequestType = USB_DIR_OUT | USB_TYPE_VENDOR |
-			USB_RECIP_INTERFACE;
-		usbinfo->ctl_read.wIndex = *(uint8*)buffer;
-	}
-
 	usb_fill_control_urb(usbinfo->ctl_urb,
 		usbinfo->usb,
 		usb_rcvctrlpipe(usbinfo->usb, 0),
@@ -2411,11 +2037,6 @@ dbus_usbos_dl_cmd(usbos_info_t *usbinfo, uint8 cmd, void *buffer, int buflen)
 
 	return (ret == DBUS_OK);
 }
-
-/**
- * Called by dbus_usb.c when it wants to download a buffer into the dongle (e.g. as part of the
- * download process, when writing nvram variables).
- */
 int
 dbus_write_membytes(usbos_info_t* usbinfo, bool set, uint32 address, uint8 *data, uint size)
 {
@@ -2424,7 +2045,11 @@ dbus_write_membytes(usbos_info_t* usbinfo, bool set, uint32 address, uint8 *data
 	int status;
 	int retval = 0;
 
+#ifdef USBSHIM
+	usburb = &bcm_usburb;
+#endif
 	DBUSTRACE(("Enter:%s\n", __FUNCTION__));
+
 
 	/* Read is not supported */
 	if (set == 0) {
@@ -2584,7 +2209,6 @@ dbus_usbos_wait(usbos_info_t *usbinfo, uint16 ms)
 	return DBUS_OK;
 }
 
-/** Called by dbus_usb.c as part of the firmware download process */
 bool
 dbus_usbos_dl_send_bulk(usbos_info_t *usbinfo, void *buffer, int len)
 {
@@ -2631,10 +2255,6 @@ dbus_usbos_intf_recv_needed(void *bus)
 	return FALSE;
 }
 
-/**
- * Higher layer (dbus_usb.c) wants to execute a function on the condition that the rx spin lock has
- * been acquired.
- */
 static void*
 dbus_usbos_intf_exec_rxlock(void *bus, exec_cb_t cb, struct exec_parms *args)
 {
@@ -2669,10 +2289,6 @@ dbus_usbos_intf_exec_txlock(void *bus, exec_cb_t cb, struct exec_parms *args)
 	return ret;
 }
 
-/**
- * if an error condition was detected in this module, the higher DBUS layer (dbus_usb.c) has to
- * be notified.
- */
 int
 dbus_usbos_errhandler(void *bus, int err)
 {
@@ -2689,10 +2305,6 @@ dbus_usbos_errhandler(void *bus, int err)
 	return DBUS_OK;
 }
 
-/**
- * if a change in bus state was detected in this module, the higher DBUS layer (dbus_usb.c) has to
- * be notified.
- */
 int
 dbus_usbos_state_change(void *bus, int state)
 {
@@ -2714,6 +2326,10 @@ int
 dbus_bus_osl_register(int vid, int pid, probe_cb_t prcb,
 	disconnect_cb_t discb, void *prarg, dbus_intf_t **intf, void *param1, void *param2)
 {
+#ifdef USBSHIM
+	usburb = &bcm_usburb;
+#endif
+
 	bzero(&g_probe_info, sizeof(probe_info_t));
 
 	probe_cb = prcb;
@@ -2735,15 +2351,18 @@ dbus_bus_osl_deregister()
 {
 	g_probe_info.dereged = TRUE;
 
-	if (disconnect_cb && disc_arg && (g_probe_info.disc_cb_done == FALSE)) {
+	if (disconnect_cb && (g_probe_info.disc_cb_done == FALSE))
 		disconnect_cb(disc_arg);
-		disc_arg = NULL;
-	}
 
 	USB_DEREGISTER();
 
 	return DBUS_OK;
 }
+
+#if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX)
+int optimize_init(usbos_info_t *usbos_info, struct usb_device *usb, int out, int in, int in2);
+int optimize_deinit(usbos_info_t *usbos_info, struct usb_device *usb);
+#endif /* EHCI_FASTPATH_TX || EHCI_FASTPATH_RX */
 
 void *
 dbus_usbos_intf_attach(dbus_pub_t *pub, void *cbarg, dbus_intf_callbacks_t *cbs)
@@ -2754,6 +2373,10 @@ dbus_usbos_intf_attach(dbus_pub_t *pub, void *cbarg, dbus_intf_callbacks_t *cbs)
 		DBUSERR(("%s: err device not downloaded!\n", __FUNCTION__));
 		return NULL;
 	}
+
+#ifdef USBSHIM
+	usburb = &bcm_usburb;
+#endif
 
 	/* Sanity check for BUS_INFO() */
 	ASSERT(OFFSETOF(usbos_info_t, pub) == 0);
@@ -2790,18 +2413,14 @@ dbus_usbos_intf_attach(dbus_pub_t *pub, void *cbarg, dbus_intf_callbacks_t *cbs)
 		usbos_info->maxps = usb_maxpacket(usbos_info->usb,
 			usbos_info->tx_pipe, usb_pipeout(usbos_info->tx_pipe));
 
-	INIT_LIST_HEAD(&usbos_info->req_rxfreeq);
-	INIT_LIST_HEAD(&usbos_info->req_txfreeq);
+	INIT_LIST_HEAD(&usbos_info->req_freeq);
 	INIT_LIST_HEAD(&usbos_info->req_rxpostedq);
 	INIT_LIST_HEAD(&usbos_info->req_txpostedq);
-	spin_lock_init(&usbos_info->rxfree_lock);
-	spin_lock_init(&usbos_info->txfree_lock);
+	spin_lock_init(&usbos_info->free_lock);
 	spin_lock_init(&usbos_info->rxposted_lock);
 	spin_lock_init(&usbos_info->txposted_lock);
 	spin_lock_init(&usbos_info->rxlock);
 	spin_lock_init(&usbos_info->txlock);
-
-	atomic_set(&usbos_info->rxposted, 0);
 
 #ifdef DBUS_LINUX_RXDPC
 	INIT_LIST_HEAD(&usbos_info->req_rxpendingq);
@@ -2842,7 +2461,7 @@ dbus_usbos_intf_attach(dbus_pub_t *pub, void *cbarg, dbus_intf_callbacks_t *cbs)
 	usbos_info->rxbuf_len = (uint)usbos_info->pub->rxsize;
 
 
-#ifdef DBUS_LINUX_RXDPC		/* Initialize DPC thread */
+#ifdef DBUS_LINUX_RXDPC		    /* Initialize DPC thread */
 	sema_init(&usbos_info->dpc_sem, 0);
 	init_completion(&usbos_info->dpc_exited);
 	usbos_info->dpc_pid = kernel_thread(dbus_usbos_dpc_thread, usbos_info, 0);
@@ -2852,20 +2471,7 @@ dbus_usbos_intf_attach(dbus_pub_t *pub, void *cbarg, dbus_intf_callbacks_t *cbs)
 	}
 #endif /* DBUS_LINUX_RXDPC */
 
-	atomic_set(&usbos_info->txallocated, 0);
-	if (DBUS_OK != dbus_usbos_urbreqs_alloc(usbos_info,
-		usbos_info->pub->ntxq, FALSE)) {
-		goto fail;
-	}
-
-	atomic_set(&usbos_info->rxallocated, 0);
-	if (DBUS_OK != dbus_usbos_urbreqs_alloc(usbos_info,
-#ifdef CTFPOOL
-		usbos_info->pub->nrxq,
-#else
-		MIN(DBUS_USB_RXQUEUE_BATCH_ADD, usbos_info->pub->nrxq),
-#endif
-		TRUE)) {
+	if (dbus_usbos_urbreqs_alloc(usbos_info) != DBUS_OK) {
 		goto fail;
 	}
 
@@ -2911,10 +2517,7 @@ fail:
 	}
 #endif
 
-	dbus_usbos_urbreqs_free(usbos_info, TRUE);
-	atomic_set(&usbos_info->rxallocated, 0);
-	dbus_usbos_urbreqs_free(usbos_info, FALSE);
-	atomic_set(&usbos_info->txallocated, 0);
+	dbus_usbos_urbreqs_free(usbos_info);
 
 	g_probe_info.usbos_info = NULL;
 
@@ -2957,10 +2560,7 @@ dbus_usbos_intf_detach(dbus_pub_t *pub, void *info)
 		usbos_info->blk_urb = NULL;
 	}
 
-	dbus_usbos_urbreqs_free(usbos_info, TRUE);
-	atomic_set(&usbos_info->rxallocated, 0);
-	dbus_usbos_urbreqs_free(usbos_info, FALSE);
-	atomic_set(&usbos_info->txallocated, 0);
+	dbus_usbos_urbreqs_free(usbos_info);
 
 #if defined(BCMDBG) || defined(DBUS_LINUX_HIST)
 	if (usbos_info->txposted_hist) {
@@ -2978,7 +2578,6 @@ dbus_usbos_intf_detach(dbus_pub_t *pub, void *info)
 	MFREE(osh, usbos_info, sizeof(usbos_info_t));
 }
 
-#if defined(WLC_HIGH) && !defined(WLC_LOW)   /* BMAC host driver specific */
 /*
  *	Kernel need have CONFIG_PM and CONFIG_USB_SUSPEND enabled
  * 	autosuspend also has to be enabled. if not enable by default,
@@ -2993,7 +2592,7 @@ dbus_usbos_intf_detach(dbus_pub_t *pub, void *info)
 static int
 dbus_usbos_intf_pnp(void *bus, int evnt)
 {
-#if !defined(USB_SUSPEND_AVAILABLE)
+#if !((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND))
 	DBUSERR(("PNP: %s not supported", __FUNCTION__));
 	return DBUS_OK;
 #else
@@ -3008,11 +2607,10 @@ dbus_usbos_intf_pnp(void *bus, int evnt)
 #else
 		g_probe_info.intf->pm_usage_cnt = 1;
 #endif
-		/* tells Linux kernel to initiate autoresume */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 33))
 		USB_AUTOPM_SET_INTERFACE(g_probe_info.intf);
 #else
-		USB_DISABLE_AUTOSUSPEND(g_probe_info.usb);
+		USB_ENABLE_AUTOSUSPEND(g_probe_info.usb);
 #endif
 
 		if (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPEND_PENDING) {
@@ -3021,7 +2619,6 @@ dbus_usbos_intf_pnp(void *bus, int evnt)
 		}
 
 		if (g_probe_info.suspend_state == USBOS_SUSPEND_STATE_SUSPENDED) {
-			/* wait for Linux to call dbus_usbos_resume() */
 		SPINWAIT((g_probe_info.suspend_state ==
 			USBOS_SUSPEND_STATE_DEVICE_ACTIVE), 3000);
 		}
@@ -3035,17 +2632,16 @@ dbus_usbos_intf_pnp(void *bus, int evnt)
 		return DBUS_ERR;
 	} else if (evnt == DBUS_PNP_SLEEP) {
 		DBUSTRACE(("PNP SLEEP\n"));
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 38))
 		dbus_usbos_sleep(bus);
+#endif
 	}
 	return DBUS_OK;
-#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(USB_SUSPEND_AVAILABLE)) */
-} /* dbus_usbos_intf_pnp */
+#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) */
+}
 
-#if defined(USB_SUSPEND_AVAILABLE)
-/**
- * Before we are requesting the Linux kernel to auto suspend: Linux kernel requires a device to
- * cancel all its pending URBs when it is going to be suspended, and not generate new URBs.
- */
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) \
+	&& (LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 38))
 static void
 dbus_usbos_sleep(usbos_info_t *usbos_info)
 {
@@ -3053,14 +2649,30 @@ dbus_usbos_sleep(usbos_info_t *usbos_info)
 
 	g_probe_info.suspend_state = USBOS_SUSPEND_STATE_SUSPEND_PENDING;
 	dbus_usbos_state_change(usbos_info, DBUS_STATE_SLEEP);
+	DBUSTRACE(("%s: unlink all URBs\n", __FUNCTION__));
+	if (usbos_info->intr_urb)
+		USB_UNLINK_URB(usbos_info->intr_urb);
+	if (usbos_info->ctl_urb)
+		USB_UNLINK_URB(usbos_info->ctl_urb);
+	if (usbos_info->blk_urb)
+		USB_UNLINK_URB(usbos_info->blk_urb);
 
-	dbus_usbos_cancel_all_urbs(usbos_info);
+	dbus_usbos_unlink(&usbos_info->req_txpostedq, &usbos_info->txposted_lock);
+	if (usbos_info->txposted > 0) {
+		DBUSERR(("%s ERROR: tx REQs posted=%d in stop!\n", __FUNCTION__,
+			usbos_info->txposted));
+	}
+	dbus_usbos_unlink(&usbos_info->req_rxpostedq, &usbos_info->rxposted_lock);
+	if (usbos_info->rxposted > 0) {
+		DBUSERR(("%s ERROR: rx REQs posted=%d in stop!\n", __FUNCTION__,
+			usbos_info->rxposted));
+	}
 
 	/* Make sure all the urb are completed, usb_unlink_urb doesn't guarantee
 	* that. Wait for 9000us since max irq interval for EHCI is 8ms.
 	*/
-	SPINWAIT(usbos_info->txposted != 0 || atomic_read(&usbos_info->rxposted) != 0, 9000);
-	if (!(usbos_info->txposted == 0 && atomic_read(&usbos_info->rxposted) == 0)) {
+	SPINWAIT(usbos_info->txposted != 0 || usbos_info->rxposted != 0, 9000);
+	if (!(usbos_info->txposted == 0 && usbos_info->rxposted == 0)) {
 		printf("fail to  cancel irbs in 9000us\n");
 	}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32))
@@ -3068,22 +2680,16 @@ dbus_usbos_sleep(usbos_info_t *usbos_info)
 #else
 	g_probe_info.intf->pm_usage_cnt = 0;
 #endif
-	/* tells Linux kernel to initiate autosuspend */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 33))
 	USB_AUTOPM_SET_INTERFACE(g_probe_info.intf);
 #else
 	USB_ENABLE_AUTOSUSPEND(g_probe_info.usb);
 #endif
 }
-#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(USB_SUSPEND_AVAILABLE)) */
-#endif /* BMAC host driver specific */
+#endif /* ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 21)) && defined(CONFIG_USB_SUSPEND)) */
 
 #ifdef USBOS_THREAD
-/**
- * Increase system performance by creating a USB thread that runs parallel to other system
- * activity.
- */
-static void*
+void*
 dbus_usbos_thread_init(usbos_info_t *usbos_info)
 {
 	usbos_list_entry_t  *entry;
@@ -3121,7 +2727,7 @@ dbus_usbos_thread_init(usbos_info_t *usbos_info)
 }
 
 
-static void
+void
 dbus_usbos_thread_deinit(usbos_info_t *usbos_info)
 {
 	struct list_head    *cur, *next;
@@ -3154,8 +2760,7 @@ dbus_usbos_thread_deinit(usbos_info_t *usbos_info)
 	}
 }
 
-/** Process completed URBs in a worker thread */
-static int
+int
 dbus_usbos_thread_func(void *data)
 {
 	usbos_info_t        *usbos_info = (usbos_info_t *)data;
@@ -3218,8 +2823,7 @@ dbus_usbos_thread_func(void *data)
 	return 0;
 }
 
-/* Called on Linux calling URB callback, see dbus_usbos_recv_complete() */
-static void
+void
 dbus_usbos_dispatch_schedule(CALLBACK_ARGS)
 {
 	urb_req_t           *req = urb->context;
@@ -3275,9 +2879,70 @@ dbus_usbos_ctl_send_debugtrig(usbos_info_t* usbinfo)
 }
 #endif /* USB_TRIGGER_DEBUG */
 
-
 #if defined(EHCI_FASTPATH_TX) || defined(EHCI_FASTPATH_RX)
-/** New optimized code for USB AP */
+
+/* Copies of structures located elsewhere. */
+
+typedef struct {
+	dbus_pub_t *pub;
+
+	void *cbarg;
+	dbus_intf_callbacks_t *cbs;
+	dbus_intf_t *drvintf;
+	void *usbosl_info;
+} usb_info_t;
+
+/* General info for all BUS */
+typedef struct dbus_irbq {
+	dbus_irb_t *head;
+	dbus_irb_t *tail;
+	int cnt;
+} dbus_irbq_t;
+
+/* This private structure dbus_info_t is also declared in dbus.c.
+ * All the fields must be consistent in both declarations.
+ */
+typedef struct dbus_info {
+	dbus_pub_t pub; /* MUST BE FIRST */
+
+	void *cbarg;
+	dbus_callbacks_t *cbs;
+	void *bus_info;
+	dbus_intf_t *drvintf;
+	uint8 *fw;
+	int fwlen;
+	uint32 errmask;
+	int rx_low_watermark;
+	int tx_low_watermark;
+	bool txoff;
+	bool txoverride;
+	bool rxoff;
+	bool tx_timer_ticking;
+
+	dbus_irbq_t *rx_q;
+	dbus_irbq_t *tx_q;
+
+#ifdef BCMDBG
+	int *txpend_q_hist;
+	int *rxpend_q_hist;
+#endif /* BCMDBG */
+#ifdef EHCI_FASTPATH_RX
+	atomic_t rx_outstanding;
+#endif
+	uint8 *nvram;
+	int	nvram_len;
+	uint8 *image;	/* buffer for combine fw and nvram */
+	int image_len;
+	uint8 *orig_fw;
+	int origfw_len;
+	int decomp_memsize;
+	dbus_extdl_t extdl;
+	int nvram_nontxt;
+} dbus_info_t;
+
+/*
+ * New optimized code
+ */
 void inline optimize_ehci_qtd_init(struct ehci_qtd *qtd, dma_addr_t dma)
 {
 	memset(qtd, 0, sizeof(*qtd));
@@ -3343,6 +3008,8 @@ static int BCMFASTPATH get_qtd_status(struct ehci_qtd *qtd, int token, int *actu
 
 }
 
+static atomic_t s_tx_pending;
+
 static void dump_qtd(struct ehci_qtd *qtd)
 {
 	printk("qtd_next %08x qtd_altnext %08x qtd_status %08x\n", qtd->qtd_next,
@@ -3366,7 +3033,7 @@ static void dump_qh(struct ehci_qh *qh)
 }
 
 
-/**
+/*
  * This code assumes the caller holding a lock
  * It is currently called from scan_async that should have the lock
  * Lock shall be dropped around the actual completion, then reacquired
@@ -3466,7 +3133,7 @@ static void BCMFASTPATH ehci_bypass_callback(int pipeindex, struct ehci_qh *qh, 
 				/* Free the coalesce buffer, if multi-buffer packet only. Do not
 				 * rely on buff, as it might not even exist
 				 */
-				if (PKTNEXT(usbos_info->pub->osh, qtd->rpc)) {
+				if (PKTNEXT(dbus_info->pub->osh, qtd->rpc)) {
 					/* printk("k-Freeing %p\n", qtd->buff); */
 					kfree(qtd->buff);
 				}
@@ -3661,8 +3328,9 @@ static int epnum(int pipe)
 	return epn;
 }
 
+/* ------------------------------------------------------------------------- */
 
-static int optimize_init(usbos_info_t *usbos_info, struct usb_device *usb, int out, int in, int in2)
+int optimize_init(usbos_info_t *usbos_info, struct usb_device *usb, int out, int in, int in2)
 {
 	int retval = -EPIPE;
 
@@ -3730,7 +3398,7 @@ static int optimize_deinit_qtds(struct ehci_qh *qh, int coalesce_buf)
 		/* Free the coalesce buffer, if multi-buffer packet only. Do not
 		 * rely on buff, as it might not even exist
 		 */
-		if (coalesce_buf && PKTNEXT(usbos_info->pub->osh, qtd->rpc)) {
+		if (coalesce_buf && PKTNEXT(dbus_info->pub->osh, qtd->rpc)) {
 			printk("k-Freeing %p, ", qtd->buff);
 			kfree(qtd->buff);
 		}
@@ -3784,7 +3452,7 @@ int optimize_deinit(usbos_info_t *usbos_info, struct usb_device *usb)
 	return 0;
 }
 
-/** Reassemble the segmented packet */
+/* Reassemble the segmented packet */
 static int BCMFASTPATH optimize_gather(const dbus_pub_t *pub, void *pkt, void **buf)
 {
 	int len = 0;
@@ -3803,7 +3471,7 @@ static int BCMFASTPATH optimize_gather(const dbus_pub_t *pub, void *pkt, void **
 		bcopy(PKTDATA(pub->osh, pkt), transfer_buf, pktlen);
 		transfer_buf += pktlen;
 		len += pktlen;
-		pkt = PKTNEXT(pub->osh, pkt);
+		pkt = PKTNEXT(usbos_info->pub->osh, pkt);
 	}
 
 	/* printk("Coalesced a %d-byte buffer\n", len); */
@@ -3831,7 +3499,9 @@ int BCMFASTPATH optimize_qtd_fill_with_rpc(const dbus_pub_t *pub, int epn,
 	return optimize_qtd_fill_with_data(pub, epn, qtd, data, token, len);
 }
 
-/** Fill the QTD from the data buffer */
+#define EHCI_PAGE_SIZE	4096
+
+/* Fill the QTD from the data buffer */
 int BCMFASTPATH optimize_qtd_fill_with_data(const dbus_pub_t *pub, int epn,
 	struct ehci_qtd *qtd, void *data, int token, int len)
 {
@@ -3887,7 +3557,7 @@ int BCMFASTPATH optimize_qtd_fill_with_data(const dbus_pub_t *pub, int epn,
 }
 
 
-/** Reimplementation of qh_append_tds()
+/* Reimplementation of qh_append_tds()
  * Returns nonzero if too many requests pending
  */
 int BCMFASTPATH optimize_submit_async(struct ehci_qtd *qtd, int epn)
@@ -4022,16 +3692,6 @@ dbus_get_fw_nvfile(int devid, uint8 **fw, int *fwlen, int type, uint16 boardtype
 	strcpy(fw_name, "brcm/bcm");
 	if (type == DBUS_FIRMWARE) {
 		switch (devid) {
-		case BCM4350_CHIP_ID:
-		case BCM4354_CHIP_ID:
-		case BCM43556_CHIP_ID:
-		case BCM43558_CHIP_ID:
-		case BCM43566_CHIP_ID:
-		case BCM43568_CHIP_ID:
-		case BCM43569_CHIP_ID:
-		case BCM43570_CHIP_ID:
-			strcat(fw_name, "4350");
-			break;
 		case BCM43143_CHIP_ID:
 			strcat(fw_name, "43143");
 			break;
@@ -4059,16 +3719,6 @@ dbus_get_fw_nvfile(int devid, uint8 **fw, int *fwlen, int type, uint16 boardtype
 		}
 	} else {
 		switch (devid) {
-		case BCM4350_CHIP_ID:
-		case BCM4354_CHIP_ID:
-		case BCM43556_CHIP_ID:
-		case BCM43558_CHIP_ID:
-		case BCM43566_CHIP_ID:
-		case BCM43568_CHIP_ID:
-		case BCM43569_CHIP_ID:
-		case BCM43570_CHIP_ID:
-			strcat(fw_name, "4350");
-			break;
 		case BCM43143_CHIP_ID:
 			strcat(fw_name, "43143");
 			break;
@@ -4117,7 +3767,7 @@ dbus_release_fw_nvfile(void *firmware)
 }
 #endif /* #ifdef BCM_REQUEST_FW */
 
-/** For a composite device the interface order is not guaranteed,
+/* For a composite device the interface order is not guaranteed,
  * scan the device struct for the WLAN interface
  */
 #ifdef BCMUSBDEV_COMPOSITE

@@ -1,7 +1,7 @@
 /*
  * Broadcom HND chip & on-chip-interconnect-related definitions.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: hndsoc.h 568047 2015-07-01 09:22:55Z $
+ * $Id: hndsoc.h 365038 2012-10-26 08:49:46Z $
  */
 
 #ifndef	_HNDSOC_H
@@ -45,25 +45,7 @@
 #define SI_WRAP_BASE    	0x18100000	/* Wrapper space base */
 #define SI_CORE_SIZE    	0x1000		/* each core gets 4Kbytes for registers */
 
-#ifndef SI_MAXCORES
-#ifdef _RTE_
-#ifdef BCM43909
-#define SI_MAXCORES		17		/* 43909 has more cores */
-#else
-#define	SI_MAXCORES		16		/* Max cores (this is arbitrary, for software
-					 * convenience and could be changed if we
-					 * make any larger chips
-					 */
-#endif /* BCM43909 */
-#else
 #define	SI_MAXCORES		32		/* NorthStar has more cores */
-#endif /* _RTE_ */
-#endif /* SI_MAXCORES */
-
-#define	SI_MAXBR		6		/* Max bridges (this is arbitrary, for software
-					 * convenience and could be changed if we
-					 * make any larger chips
-					 */
 
 #define	SI_FASTRAM		0x19000000	/* On-chip RAM on chips that also have DDR */
 #define	SI_FASTRAM_SWAPPED	0x19800000
@@ -78,7 +60,7 @@
 #define SI_NS_NANDFLASH		0x1c000000	/* NorthStar NAND flash base */
 #define SI_NS_NORFLASH		0x1e000000	/* NorthStar NOR flash base */
 #define SI_NS_ROM		0xfffd0000	/* NorthStar ROM */
-#define	SI_NS_FLASH_WINDOW	0x02000000	/* Flash XIP Window */
+#define	SI_NS_FLASH_WINDOW	0x02000000	/* NorthStar Flash XIP Window */
 
 #define	SI_ARM7S_ROM		0x20000000	/* ARM7TDMI-S ROM */
 #define	SI_ARMCR4_ROM		0x000f0000	/* ARM Cortex-R4 ROM */
@@ -87,7 +69,6 @@
 #define	SI_ARM_FLASH1		0xffff0000	/* ARM Flash Region 1 */
 #define	SI_ARM_FLASH1_SZ	0x00010000	/* ARM Size of Flash Region 1 */
 
-#define SI_SFLASH		0x14000000
 #define SI_PCI_DMA		0x40000000	/* Client Mode sb2pcitranslation2 (1 GB) */
 #define SI_PCI_DMA2		0x80000000	/* Client Mode sb2pcitranslation2 (1 GB) */
 #define SI_PCI_DMA_SZ		0x40000000	/* Client Mode sb2pcitranslation2 size in bytes */
@@ -97,32 +78,6 @@
 #define SI_PCIE_DMA_H32		0x80000000	/* PCIE Client Mode sb2pcitranslation2
 						 * (2 ZettaBytes), high 32 bits
 						 */
-
-#define SI_BCM53573_NANDFLASH	0x30000000	/* 53573 NAND flash base */
-#define SI_BCM53573_NORFLASH	0x1c000000	/* 53573 NOR flash base */
-#define SI_BCM53573_FLASH2_SZ	0x04000000	/* 53573 NOR flash2 size */
-
-#define	SI_BCM53573_NORFLASH_WINDOW	0x01000000	/* only support 16M direct access for
-							 * 3-byte address modes in spi flash
-							 */
-#define	SI_BCM53573_BOOTDEV_MASK	0x3
-#define	SI_BCM53573_BOOTDEV_NOR		0x0
-
-#define SI_BCM53573_NAND_PRE_MASK	0x100	/* 53573 NAND present mask */
-
-#define	SI_BCM53573_DDRTYPE_MASK	0x10
-#define	SI_BCM53573_DDRTYPE_DDR3	0x10
-
-#define	SI_BCM47189_RGMII_VDD_MASK	0x3
-#define	SI_BCM47189_RGMII_VDD_SHIFT	21
-#define	SI_BCM47189_RGMII_VDD_3_3V	0
-#define	SI_BCM47189_RGMII_VDD_2_5V	1
-#define	SI_BCM47189_RGMII_VDD_1_5V	1
-
-#define	SI_BCM53573_LOCKED_CPUPLL	0x1
-
-/* APB bridge code */
-#define	APB_BRIDGE_ID		0x135		/* APB Bridge 0, 1, etc. */
 
 /* core codes */
 #define	NODEV_CORE_ID		0x700		/* Invalid coreid */
@@ -186,10 +141,6 @@
 #define PCIE2_CORE_ID		0x83c		/* pci express Gen2 core */
 #define USB30D_CORE_ID		0x83d		/* usb 3.0 device core */
 #define ARMCR4_CORE_ID		0x83e		/* ARM CR4 CPU */
-#define GCI_CORE_ID		0x840		/* GCI Core */
-#define M2MDMA_CORE_ID          0x844           /* memory to memory dma */
-#define CMEM_CORE_ID		0x846		/* CNDS DDR2/3 memory controller */
-#define ARMCA7_CORE_ID		0x847		/* ARM CA7 CPU */
 #define APB_BRIDGE_CORE_ID	0x135		/* APB bridge core ID */
 #define AXI_CORE_ID		0x301		/* AXI/GPV core ID */
 #define EROM_CORE_ID		0x366		/* EROM core ID */
@@ -228,12 +179,12 @@
 #define CC_4706B0_CORE_REV	0x8000001f		/* chipcommon core */
 #define SOCRAM_4706B0_CORE_REV	0x80000005		/* internal memory core */
 #define GMAC_4706B0_CORE_REV	0x80000000		/* Gigabit MAC core */
-#define NS_PCIEG2_CORE_REV_B0	0x7		/* NS-B0 PCIE Gen 2 core rev */
 
 /* There are TWO constants on all HND chips: SI_ENUM_BASE above,
  * and chipcommon being the first core:
  */
 #define	SI_CC_IDX		0
+
 /* SOC Interconnect types (aka chip types) */
 #define	SOCI_SB			0
 #define	SOCI_AI			1
@@ -266,7 +217,6 @@
  * communicate w/PMU regarding clock control.
  */
 #define SI_CLK_CTL_ST		0x1e0		/* clock control and status */
-#define SI_PWR_CTL_ST		0x1e8		/* For memory clock gating */
 
 /* clk_ctl_st register */
 #define	CCS_FORCEALP		0x00000001	/* force ALP request */
@@ -277,19 +227,14 @@
 #define	CCS_FORCEHWREQOFF	0x00000020	/* Force HW Clock Request Off */
 #define CCS_HQCLKREQ		0x00000040	/* HQ Clock Required */
 #define CCS_USBCLKREQ		0x00000100	/* USB Clock Req */
-#define CCS_SECICLKREQ		0x00000100	/* SECI Clock Req */
-#define CCS_ARMFASTCLOCKREQ	0x00000100	/* ARM CR4 fast clock request */
-#define CCS_AVBCLKREQ		0x00000400	/* AVB Clock enable request */
 #define CCS_ERSRC_REQ_MASK	0x00000700	/* external resource requests */
 #define CCS_ERSRC_REQ_SHIFT	8
 #define	CCS_ALPAVAIL		0x00010000	/* ALP is available */
 #define	CCS_HTAVAIL		0x00020000	/* HT is available */
 #define CCS_BP_ON_APL		0x00040000	/* RO: Backplane is running on ALP clock */
 #define CCS_BP_ON_HT		0x00080000	/* RO: Backplane is running on HT clock */
-#define CCS_ARMFASTCLOCKSTATUS	0x01000000	/* Fast CPU clock is running */
 #define CCS_ERSRC_STS_MASK	0x07000000	/* external resource status */
 #define CCS_ERSRC_STS_SHIFT	24
-#define CCS_SECI_AVAIL		0x01000000	/* RO: SECI is available  */
 
 #define	CCS0_HTAVAIL		0x00010000	/* HT avail in chipc and pcmcia on 4328a0 */
 #define	CCS0_ALPAVAIL		0x00020000	/* ALP avail in chipc and pcmcia on 4328a0 */
@@ -322,9 +267,9 @@
 #define	SOC_KNLDEV_NORFLASH	0x00000002
 #define	SOC_KNLDEV_NANDFLASH	0x00000004
 
-#if !defined(_LANGUAGE_ASSEMBLY) && !defined(__ASSEMBLY__)
+#ifndef _LANGUAGE_ASSEMBLY
 int soc_boot_dev(void *sih);
 int soc_knl_dev(void *sih);
-#endif	/* !defined(_LANGUAGE_ASSEMBLY) && !defined(__ASSEMBLY__) */
+#endif	/* _LANGUAGE_ASSEMBLY */
 
 #endif /* _HNDSOC_H */

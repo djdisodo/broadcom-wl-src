@@ -1,7 +1,7 @@
 /*
  * BCM43XX Sonics SiliconBackplane PCMCIA core hardware definitions.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: sbpcmcia.h 521456 2014-12-17 21:28:27Z $
+ * $Id: sbpcmcia.h 361350 2012-10-08 10:09:58Z $
  */
 
 #ifndef	_SBPCMCIA_H
@@ -101,7 +101,6 @@
 
 /* The CIS stops where the FCRs start */
 #define	CIS_SIZE		PCMCIA_FCR
-#define CIS_SIZE_12K    1154    /* Maximum h/w + s/w sub region size for 12k OTP */
 
 /* CIS tuple length field max */
 #define CIS_TUPLE_LEN_MAX	0xff
@@ -297,10 +296,8 @@
 /* Unified OTP: tupple to embed USB manfid inside SDIO CIS */
 #define HNBU_UMANFID		0x53
 #define HNBU_PUBKEY		0x54	/* 128 byte; publick key to validate downloaded FW */
-#define HNBU_WOWLGPIO       0x55   /* 1 byte bit 7 initial polarity, bit 6..0 gpio pin */
 #define HNBU_MUXENAB		0x56	/* 1 byte to enable mux options */
 #define HNBU_GCI_CCR		0x57	/* GCI Chip control register */
-
 #define HNBU_FEM_CFG		0x58	/* FEM config */
 #define HNBU_ACPA_C0		0x59	/* ACPHY PA parameters: chain 0 */
 #define HNBU_ACPA_C1		0x5a	/* ACPHY PA parameters: chain 1 */
@@ -313,7 +310,7 @@
 #define HNBU_NOISELVL		0x61
 #define HNBU_RXGAIN_ERR		0x62
 #define HNBU_AGBGA		0x63
-#define HNBU_USBDESC_COMPOSITE	0x64    /* USB WLAN/BT composite descriptor */
+#define HNBU_USBDESC_COMPOSITE  0x64    /* USB WLAN/BT composite descriptor */
 #define HNBU_PATCH_AUTOINC8	0x65	/* Auto increment patch entry for 8 byte patching */
 #define HNBU_PATCH8		0x66	/* Patch entry for 8 byte patching */
 #define HNBU_ACRXGAINS_C0	0x67	/* ACPHY rxgains: chain 0 */
@@ -322,18 +319,13 @@
 #define HNBU_TXDUTY		0x6a	/* Tx duty cycle for ACPHY 5g 40/80 Mhz */
 #define HNBU_USBUTMI_CTL        0x6b    /* 2 byte USB UTMI/LDO Control */
 #define HNBU_PDOFF_2G		0x6c
-#define HNBU_USBSSPHY_UTMI_CTL0 0x6d    /* 4 byte USB SSPHY UTMI Control */
-#define HNBU_USBSSPHY_UTMI_CTL1 0x6e    /* 4 byte USB SSPHY UTMI Control */
-#define HNBU_USBSSPHY_UTMI_CTL2 0x6f    /* 4 byte USB SSPHY UTMI Control */
-#define HNBU_USBSSPHY_SLEEP0    0x70    /* 2 byte USB SSPHY sleep */
-#define HNBU_USBSSPHY_SLEEP1    0x71    /* 2 byte USB SSPHY sleep */
-#define HNBU_USBSSPHY_SLEEP2    0x72    /* 2 byte USB SSPHY sleep */
-#define HNBU_USBSSPHY_SLEEP3    0x73    /* 2 byte USB SSPHY sleep */
-#define HNBU_USBSSPHY_MDIO      0x74    /* USB SSPHY INIT regs setting */
-#define HNBU_USB30PHY_NOSS      0x75    /* USB30 NO Super Speed */
-#define HNBU_USB30PHY_U1U2      0x76    /* USB30 PHY U1U2 Enable */
-#define HNBU_USB30PHY_REGS      0x77    /* USB30 PHY REGs update */
-#define HNBU_GPIO_PULL_DOWN     0x78    /* 4 byte GPIO pull down mask */
+#define HNBU_USBSSPHY_UTMI_CTL0	0x6d    /* 4 byte USB SSPHY UTMI Control */
+#define HNBU_USBSSPHY_UTMI_CTL1	0x6e    /* 4 byte USB SSPHY UTMI Control */
+#define HNBU_USBSSPHY_UTMI_CTL2	0x6f    /* 4 byte USB SSPHY UTMI Control */
+#define HNBU_USBSSPHY_SLEEP0	0x70    /* 2 byte USB SSPHY sleep */
+#define HNBU_USBSSPHY_SLEEP1	0x71    /* 2 byte USB SSPHY sleep */
+#define HNBU_USBSSPHY_SLEEP2	0x72    /* 2 byte USB SSPHY sleep */
+#define HNBU_USBSSPHY_SLEEP3	0x73    /* 2 byte USB SSPHY sleep */
 
 #define HNBU_SROM3SWRGN		0x80	/* 78 bytes; srom rev 3 s/w region without crc8
 					 * plus extra info appended.
@@ -341,19 +333,6 @@
 #define HNBU_RESERVED		0x81	/* Reserved for non-BRCM post-mfg additions */
 #define HNBU_CUSTOM1		0x82	/* 4 byte; For non-BRCM post-mfg additions */
 #define HNBU_CUSTOM2		0x83	/* Reserved; For non-BRCM post-mfg additions */
-#define HNBU_ACPAPARAM		0x84	/* ACPHY PAPARAM */
-#define HNBU_ACPA_CCK		0x86	/* ACPHY PA trimming parameters: CCK */
-#define HNBU_ACPA_40		0x87	/* ACPHY PA trimming parameters: 40 */
-#define HNBU_ACPA_80		0x88	/* ACPHY PA trimming parameters: 80 */
-#define HNBU_ACPA_4080		0x89	/* ACPHY PA trimming parameters: 40/80 */
-#define HNBU_SUBBAND5GVER	0x8a	/* subband5gver */
-#define HNBU_PAPARAMBWVER	0x8b	/* paparambwver */
-
-#define HNBU_MCS5Gx1PO		0x8c
-#define HNBU_ACPPR_SB8080_PO		0x8d
-
-#define HNBU_ACPA_160				0x8e	/* ACPHY PA parameters for 160 */
-#define HNBU_ACPA_80P80				0x8f	/* ACPHY PA parameters for 80p80 */
 
 
 #endif /* !defined(LINUX_POSTMOGRIFY_REMOVAL) */

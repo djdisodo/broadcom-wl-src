@@ -1,7 +1,7 @@
 /*
  * Low-Level PCI and SI support for BCM47xx
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: hndpci.c 502092 2014-09-11 21:12:39Z $
+ * $Id: hndpci.c 358999 2012-09-26 05:59:33Z $
  */
 
 #include <bcm_cfg.h>
@@ -118,7 +118,7 @@ hndpci_set_busid(uint busid)
 
 static int
 hndpci_pci_coreunit(uint bus)
-{	uint i;
+{	int i;
 
 	ASSERT(bus >= 1);
 	for (i = SI_PCI_MAXCORES - 1; i >= 0; i--) {
@@ -227,7 +227,7 @@ config_cmd(si_t *sih, uint coreunit, uint bus, uint dev, uint func, uint off)
 	return addr;
 }
 
-/**
+/*
  * Read host bridge PCI config registers from Silicon Backplane ( >= rev8 ).
  *
  * It returns TRUE to indicate that access to the host bridge's pci config
@@ -417,7 +417,7 @@ done:
 	return ret;
 }
 
-/**
+/*
  * Must access emulated PCI configuration at these locations even when
  * the real PCI config space exists and is accessible.
  *
@@ -437,7 +437,7 @@ done:
 	 (off == PCI_CFG_HDR) || \
 	 (off == PCI_CFG_INT) || (off == PCI_CFG_PIN))
 
-/** Sync the emulation registers and the real PCI config registers. */
+/* Sync the emulation registers and the real PCI config registers. */
 static void
 si_pcid_read_config(si_t *sih, uint coreidx, si_pci_cfg_t *cfg, uint off, uint len)
 {
@@ -620,14 +620,15 @@ hndpci_write_config(si_t *sih, uint bus, uint dev, uint func, uint off, void *bu
 	else
 		return extpci_write_config(sih, bus, dev, func, off, buf, len);
 }
+
 void
-BCMATTACHFN(hndpci_ban)(uint16 core)
+hndpci_ban(uint16 core)
 {
 	if (pci_banned < ARRAYSIZE(pci_ban))
 		pci_ban[pci_banned++] = core;
 }
 
-/** return cap_offset if requested capability exists in the PCI config space */
+/* return cap_offset if requested capability exists in the PCI config space */
 uint8
 hndpci_find_pci_capability(si_t *sih, uint bus, uint dev, uint func,
                            uint8 req_cap_id, uchar *buf, uint32 *buflen)
@@ -687,8 +688,8 @@ hndpci_find_pci_capability(si_t *sih, uint bus, uint dev, uint func,
 }
 
 
-/**
- * Initialize PCI core.
+/*
+ * Initiliaze PCI core.
  * Return 0 after a successful initialization.
  * Otherwise return -1 to indicate there is no PCI core and
  * return 1 to indicate PCI core is disabled.
@@ -1016,7 +1017,9 @@ hndpci_deinit_pci(si_t *sih, uint coreunit)
 	return 0;
 }
 
-/** Deinitialize PCI cores */
+/*
+ * Deinitialize PCI cores
+ */
 void
 hndpci_deinit(si_t *sih)
 {
@@ -1026,7 +1029,9 @@ hndpci_deinit(si_t *sih)
 		hndpci_deinit_pci(sih, coreunit);
 }
 
-/** Get the PCI region address and size information */
+/*
+ * Get the PCI region address and size information.
+ */
 static void __init
 BCMATTACHFN(hndpci_init_regions)(si_t *sih, uint func, pci_config_regs *cfg, si_bar_cfg_t *bar)
 {
@@ -1071,7 +1076,7 @@ BCMATTACHFN(hndpci_init_regions)(si_t *sih, uint func, pci_config_regs *cfg, si_
 	}
 }
 
-/**
+/*
  * Construct PCI config spaces for SB cores to be accessed as if they were PCI devices.
  */
 void __init
@@ -1192,7 +1197,7 @@ done:
 	si_setcoreidx(sih, coreidx);
 }
 
-/**
+/*
  * Initialize PCI core and construct PCI config spaces for SI cores.
  * Must propagate hndpci_init_pci() return value to the caller to let
  * them know the PCI core initialization status.

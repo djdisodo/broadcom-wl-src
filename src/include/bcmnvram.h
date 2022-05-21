@@ -1,7 +1,7 @@
 /*
  * NVRAM variable manipulation
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmnvram.h 496107 2014-08-11 09:29:41Z $
+ * $Id: bcmnvram.h 371897 2012-11-29 20:19:17Z $
  */
 
 #ifndef _bcmnvram_h_
@@ -40,6 +40,10 @@ struct nvram_tuple {
 	struct nvram_tuple *next;
 };
 
+/*
+ * Get default value for an NVRAM variable
+ */
+extern char *nvram_default_get(const char *name);
 
 /*
  * Initialize NVRAM access. May be unnecessary or undefined on certain
@@ -76,63 +80,50 @@ extern void nvram_exit(void *sih);
 extern char * nvram_get(const char *name);
 
 /*
- * Get the value of an NVRAM variable. The pointer returned may be
- * invalid after a set.
- * @param	name	name of variable to get
- * @param	bit	bit value to get
- * @return	value of variable or NULL if undefined
- */
-extern char * nvram_get_bitflag(const char *name, const int bit);
-
-/*
  * Read the reset GPIO value from the nvram and set the GPIO
  * as input
  */
 extern int BCMINITFN(nvram_resetgpio_init)(void *sih);
 
-extern int nvram_match(char *name, char *match);
- 
-extern int nvram_invmatch(char *name, char *invmatch);
+/*
+ * Get the value of an NVRAM variable.
+ * @param	name	name of variable to get
+ * @return	value of variable or NUL if undefined
+ */
+static INLINE char *
+nvram_safe_get(const char *name)
+{
+	char *p = nvram_get(name);
+	return p ? p : "";
+}
 
-extern void nvram_open(void);
+/*
+ * Match an NVRAM variable.
+ * @param	name	name of variable to match
+ * @param	match	value to compare against value of variable
+ * @return	TRUE if variable is defined and its value is string equal
+ *		to match or FALSE otherwise
+ */
+static INLINE int
+nvram_match(const char *name, const char *match)
+{
+	const char *value = nvram_get(name);
+	return (value && !strcmp(value, match));
+}
 
-extern void nvram_close(void);
-
-extern int nvram_immed_set(const char *name, const char *value);
-
-extern void nvram_store_collection(char *name,char *buf);
-
-extern char *nvram_get_collection(char *name);
-
-extern char *nvram_safe_get(const char *name);
-
-extern void nvram_safe_unset(const char *name);
-
-extern void nvram_safe_set(const char *name, char *value);
-
-extern char *nvram_prefix_get(const char *name, const char *prefix);
-
-extern int nvram_prefix_match(const char *name, const char *prefix,char *match);
-
-extern int nvram_default_match (char *var, char *match, char *def);
-
-extern char *nvram_default_get (char *var, char *def);
-
-extern char *nvram_nget(const char *fmt,...);
-
-extern int nvram_nset(char *value,const char *fmt,...);
-
-extern int nvram_nmatch(char *match,const char *fmt,...);
-
-int nvram_default_geti(char *var, int def);
-
-extern int nvram_geti(const char *name);
-
-extern void nvram_seti(const char *name, int value);
-
-extern int nvram_matchi(char *name, int match);
-
-extern int nvram_invmatchi(char *name, int match);
+/*
+ * Inversely match an NVRAM variable.
+ * @param	name	name of variable to match
+ * @param	match	value to compare against value of variable
+ * @return	TRUE if variable is defined and its value is not string
+ *		equal to invmatch or FALSE otherwise
+ */
+static INLINE int
+nvram_invmatch(const char *name, const char *invmatch)
+{
+	const char *value = nvram_get(name);
+	return (value && strcmp(value, invmatch));
+}
 
 /*
  * Set the value of an NVRAM variable. The name and value strings are
@@ -146,17 +137,6 @@ extern int nvram_invmatchi(char *name, int match);
 extern int nvram_set(const char *name, const char *value);
 
 /*
- * Set the value of an NVRAM variable. The name and value strings are
- * copied into private storage. Pointers to previously set values
- * may become invalid. The new value may be immediately
- * retrieved but will not be permanently stored until a commit.
- * @param	name	name of variable to set
- * @param	bit	bit value to set
- * @param	value	value of variable
- * @return	0 on success and errno on failure
- */
-extern int nvram_set_bitflag(const char *name, const int bit, const int value);
-/*
  * Unset an NVRAM variable. Pointers to previously set values
  * remain valid until a set.
  * @param	name	name of variable to unset
@@ -164,6 +144,15 @@ extern int nvram_set_bitflag(const char *name, const int bit, const int value);
  * NOTE: use nvram_commit to commit this change to flash.
  */
 extern int nvram_unset(const char *name);
+
+/*
+ * Commit NVRAM variables to permanent storage. All pointers to values
+ * may be invalid after a commit.
+ * NVRAM values are undefined after a commit.
+ * @param   nvram_corrupt    true to corrupt nvram, false otherwise.
+ * @return	0 on success and errno on failure
+ */
+extern int nvram_commit_internal(bool nvram_corrupt);
 
 /*
  * Commit NVRAM variables to permanent storage. All pointers to values
@@ -187,6 +176,7 @@ extern int nvram_getall(char *nvram_buf, int count);
  */
 uint8 nvram_calc_crc(struct nvram_header * nvh);
 
+extern int nvram_space;
 #endif /* _LANGUAGE_ASSEMBLY */
 
 /* The NVRAM version number stored as an NVRAM variable */
@@ -197,50 +187,13 @@ uint8 nvram_calc_crc(struct nvram_header * nvh);
 #define NVRAM_INVALID_MAGIC	0xFFFFFFFF
 #define NVRAM_VERSION		1
 #define NVRAM_HEADER_SIZE	20
-
-/* For CFE builds this gets passed in thru the makefile */
-#if defined(CONFIG_ARM)
-#define NVSIZE                 0x20000
-#define MAX_NVRAM_SPACE		NVSIZE
-#define DEF_NVRAM_SPACE		0x10000
-#else
-#define MAX_NVRAM_SPACE		NVRAM_SPACE
-#define DEF_NVRAM_SPACE		0x10000
-#endif
-
-
-#if !defined(CONFIG_BCM80211AC) && !defined(CONFIG_ARM) && !defined(HAVE_NORTHSTAR)
-#if defined(CONFIG_NVRAM_60K)
-#define NVRAM_SPACE		0xf000
-#elif defined(CONFIG_NVRAM_64K)
-#define NVRAM_SPACE		0x10000
-#else
+/* This definition is for precommit staging, and will be removed */
 #define NVRAM_SPACE		0x8000
+/* For CFE builds this gets passed in thru the makefile */
+#ifndef MAX_NVRAM_SPACE
+#define MAX_NVRAM_SPACE		0x10000
 #endif
-#else
-#define NVRAM_SPACE		0x10000
-#if !defined(CONFIG_ARM) && !defined(HAVE_NORTHSTAR)
-#define NVRAM_SPACE_256		0x40000
-#endif
-#endif
-
-#if defined(HAVE_80211AC) || defined(HAVE_NVRAM_64K)
-#undef NVRAM_SPACE
-#define NVRAM_SPACE		0x10000
-
-#if !defined(CONFIG_ARM) && !defined(HAVE_NORTHSTAR)
-#undef NVRAM_SPACE_256
-#define NVRAM_SPACE_256		0x40000
-#endif
-
-#endif
-
-/* debug output for NVRAM_SPACE*/
-#define VALUE_TO_STRING(x) #x
-#define VALUE(x) VALUE_TO_STRING(x)
-#define VAR_NAME_VALUE(var) #var "="  VALUE(var)
-//#pragma message (VAR_NAME_VALUE(NVRAM_SPACE))
-
+#define DEF_NVRAM_SPACE		0x8000
 #define ROM_ENVRAM_SPACE	0x1000
 #define NVRAM_LZMA_MAGIC	0x4c5a4d41	/* 'LZMA' */
 

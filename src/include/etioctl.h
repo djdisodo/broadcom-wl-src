@@ -1,7 +1,7 @@
 /*
  * BCM44XX Ethernet Windows device driver custom OID definitions.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,7 +14,7 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- * $Id: etioctl.h 474120 2014-04-30 06:59:18Z $
+ * $Id: etioctl.h 381881 2013-01-30 06:04:30Z $
  */
 
 #ifndef _etioctl_h_
@@ -47,9 +47,6 @@
 #define ETCPHYWR2	13
 #define ETCROBORD	14
 #define ETCROBOWR	15
-#define ETCROBORD4	16
-#define ETCROBOWR4	17
-#define ETCROBOWR1	18
 
 /*
  * A set of iovars defined for ET set/get
@@ -62,19 +59,6 @@
 #define IOV_COUNTERS		6
 #define IOV_DUMP_CTF		7
 #define IOV_DUMP_CTRACE		8
-#define IOV_DUMP		9
-#define IOV_FA_DUMP		10
-#define IOV_PORTSTATS		11
-#define IOV_SW_MCTBL		12
-#define IOV_DMA_RX_THRESH	13
-#define IOV_DMA_RX_POLICY	14
-#define IOV_RXQUOTA			15
-#define IOV_RXLAZYTO		16
-#define IOV_RXLAZYFC		17
-#define IOV_MACRD			18
-#define IOV_MACWR			19
-#define IOV_DUMP_FWDER		20
-#define IOV_CAP			21
 
 #if defined(linux) || defined(__ECOS)
 #define SIOCSETCUP		(SIOCDEVPRIVATE + ETCUP)
@@ -93,9 +77,6 @@
 #define SIOCSETCPHYWR2		(SIOCDEVPRIVATE + ETCPHYWR2)
 #define SIOCGETCROBORD		(SIOCDEVPRIVATE + ETCROBORD)
 #define SIOCSETCROBOWR		(SIOCDEVPRIVATE + ETCROBOWR)
-#define SIOCGETCROBORD4		(SIOCDEVPRIVATE + ETCROBORD4)
-#define SIOCSETCROBOWR4		(SIOCDEVPRIVATE + ETCROBOWR4)
-#define SIOCSETCROBOWR1		(SIOCDEVPRIVATE + ETCROBOWR1)
 
 /* structure to send a generic var set/get */
 typedef struct et_var_s {
@@ -132,9 +113,6 @@ struct txg {
 #define SIOCSETCPHYWR2		 _IOW('e', 13, struct ifreq)
 #define SIOCGETCROBORD		_IOWR('e', 14, struct ifreq)
 #define SIOCSETCROBOWR		 _IOW('e', 15, struct ifreq)
-#define SIOCGETCROBORD4		_IOWR('e', 16, struct ifreq)
-#define SIOCSETCROBOWR4		 _IOW('e', 17, struct ifreq)
-#define SIOCSETCROBOWR1		 _IOW('e', 18, struct ifreq)
 
 /* arg to SIOCTXGEN */
 struct txg {
@@ -176,18 +154,5 @@ typedef struct et_cb {
 	void (*fn)(void *, int);	/* Callback function */
 	void *context;				/* Passed to callback function */
 } et_cb_t;
-
-/* FA mode values */
-#define CTF_FA_DISABLED		0
-#define CTF_FA_BYPASS		1
-#define CTF_FA_NORMAL		2
-#define CTF_FA_SW_ACC		3
-#define FA_ON(mode) 		(mode == CTF_FA_BYPASS || mode == CTF_FA_NORMAL)
-
-/* FA callback commands */
-#define FA_CB_ADD_NAPT		1
-#define FA_CB_DEL_NAPT		2
-#define FA_CB_GET_LIVE		3
-#define FA_CB_CONNTRACK		4
 
 #endif /* _etioctl_h_ */

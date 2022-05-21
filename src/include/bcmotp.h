@@ -1,7 +1,7 @@
 /*
  * OTP support.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmotp.h 473704 2014-04-29 15:49:57Z $
+ * $Id: bcmotp.h 321779 2012-03-16 19:39:00Z $
  */
 
 #ifndef	_bcmotp_h_
@@ -29,7 +29,7 @@
 #define OTP_ALL_RGN	0xf	/* From h/w region to end of OTP including checksum */
 
 /* OTP Size */
-#define OTP_SZ_MAX		(12288/8)	/* maximum bytes in one CIS */
+#define OTP_SZ_MAX		(6144/8)	/* maximum bytes in one CIS */
 
 /* Fixed size subregions sizes in words */
 #define OTPGU_CI_SZ		2
@@ -45,16 +45,13 @@
 /* Exported functions */
 extern int	otp_status(void *oh);
 extern int	otp_size(void *oh);
-extern bool	otp_isunified(void *oh);
-extern uint16	otp_avsbitslen(void *oh);
 extern uint16	otp_read_bit(void *oh, uint offset);
 extern void*	otp_init(si_t *sih);
-extern int	otp_newcis(void *oh);
 extern int	otp_read_region(si_t *sih, int region, uint16 *data, uint *wlen);
 extern int	otp_read_word(si_t *sih, uint wn, uint16 *data);
 extern int	otp_nvread(void *oh, char *data, uint *len);
 #ifdef BCMNVRAMW
-extern int	otp_write_region(si_t *sih, int region, uint16 *data, uint wlen, uint flags);
+extern int	otp_write_region(si_t *sih, int region, uint16 *data, uint wlen);
 extern int	otp_write_word(si_t *sih, uint wn, uint16 data);
 extern int	otp_cis_append_region(si_t *sih, int region, char *vars, int count);
 extern int	otp_lock(si_t *sih);

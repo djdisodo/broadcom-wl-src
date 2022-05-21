@@ -1,7 +1,7 @@
 /*
  * Fundamental types and constants relating to WPA
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: wpa.h 450927 2014-01-23 14:13:36Z $
+ * $Id: wpa.h 353470 2012-08-27 18:08:37Z $
  */
 
 #ifndef _proto_wpa_h_
@@ -75,8 +75,6 @@ typedef BWL_PRE_PACKED_STRUCT struct {
 #define WPA_RSN_IE_TAG_FIXED_LEN	2
 typedef uint8 wpa_pmkid_t[WPA2_PMKID_LEN];
 
-#define WFA_OSEN_IE_FIXED_LEN	6
-
 /* WPA suite/multicast suite */
 typedef BWL_PRE_PACKED_STRUCT struct
 {
@@ -114,6 +112,12 @@ typedef BWL_PRE_PACKED_STRUCT struct
 #define WPA_CIPHER_BIP		6	/* WEP (104-bit) */
 #define WPA_CIPHER_TPK		7	/* Group addressed traffic not allowed */
 
+#ifdef BCMWAPI_WAI
+#define WAPI_CIPHER_NONE	WPA_CIPHER_NONE
+#define WAPI_CIPHER_SMS4	11
+
+#define WAPI_CSE_WPI_SMS4	1
+#endif /* BCMWAPI_WAI */
 
 #define IS_WPA_CIPHER(cipher)	((cipher) == WPA_CIPHER_NONE || \
 				 (cipher) == WPA_CIPHER_WEP_40 || \
@@ -123,6 +127,17 @@ typedef BWL_PRE_PACKED_STRUCT struct
 				 (cipher) == WPA_CIPHER_AES_CCM || \
 				 (cipher) == WPA_CIPHER_TPK)
 
+#ifdef BCMWAPI_WAI
+#define IS_WAPI_CIPHER(cipher)	((cipher) == WAPI_CIPHER_NONE || \
+				 (cipher) == WAPI_CSE_WPI_SMS4)
+
+/* convert WAPI_CSE_WPI_XXX to WAPI_CIPHER_XXX */
+#define WAPI_CSE_WPI_2_CIPHER(cse) ((cse) == WAPI_CSE_WPI_SMS4 ? \
+				WAPI_CIPHER_SMS4 : WAPI_CIPHER_NONE)
+
+#define WAPI_CIPHER_2_CSE_WPI(cipher) ((cipher) == WAPI_CIPHER_SMS4 ? \
+				WAPI_CSE_WPI_SMS4 : WAPI_CIPHER_NONE)
+#endif /* BCMWAPI_WAI */
 
 /* WPA TKIP countermeasures parameters */
 #define WPA_TKIP_CM_DETECT	60	/* multiple MIC failure window (seconds) */
@@ -144,8 +159,6 @@ typedef BWL_PRE_PACKED_STRUCT struct
 #define RSN_CAP_16_REPLAY_CNTRS		3
 #define RSN_CAP_MFPR			0x0040
 #define RSN_CAP_MFPC			0x0080
-#define RSN_CAP_SPPC			0x0400
-#define RSN_CAP_SPPR			0x0800
 
 /* WPA capabilities defined in 802.11i */
 #define WPA_CAP_4_REPLAY_CNTRS		RSN_CAP_4_REPLAY_CNTRS
@@ -164,6 +177,19 @@ typedef BWL_PRE_PACKED_STRUCT struct
 
 #define WPA2_PMKID_COUNT_LEN	2
 
+#ifdef BCMWAPI_WAI
+#define WAPI_CAP_PREAUTH		RSN_CAP_PREAUTH
+
+/* Other WAI definition */
+#define WAPI_WAI_REQUEST		0x00F1
+#define WAPI_UNICAST_REKEY		0x00F2
+#define WAPI_STA_AGING			0x00F3
+#define WAPI_MUTIL_REKEY		0x00F4
+#define WAPI_STA_STATS			0x00F5
+
+#define WAPI_USK_REKEY_COUNT		0x4000000 /* 0xA00000 */
+#define WAPI_MSK_REKEY_COUNT		0x4000000 /* 0xA00000 */
+#endif /* BCMWAPI_WAI */
 
 /* This marks the end of a packed structure section. */
 #include <packed_section_end.h>

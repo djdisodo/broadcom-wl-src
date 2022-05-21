@@ -1,7 +1,7 @@
 /*
  * NVRAM variable manipulation (direct mapped flash)
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -41,40 +41,50 @@
 
 struct nvram_tuple *_nvram_realloc(struct nvram_tuple *t, const char *name, const char *value);
 void  _nvram_free(struct nvram_tuple *t);
-int  _nvram_read(void *buf, int idx);
+int  _nvram_read(void *buf);
 
 extern char *_nvram_get(const char *name);
 extern int _nvram_set(const char *name, const char *value);
 extern int _nvram_unset(const char *name);
 extern int _nvram_getall(char *buf, int count);
 extern int _nvram_commit(struct nvram_header *header);
-extern int _nvram_init(void *si, int idx);
+extern int _nvram_init(void *si);
 extern void _nvram_exit(void);
 
 static struct nvram_header *nvram_header = NULL;
 static int nvram_do_reset = FALSE;
-
-#if defined(_CFE_) && defined(BCM_DEVINFO)
-int _nvram_hash_sync(void);
-
-char *devinfo_flashdrv_nvram = "flash0.devinfo";
-
-static struct nvram_header *devinfo_nvram_header = NULL;
-static unsigned char devinfo_nvram_nvh[MAX_NVRAM_SPACE];
-#endif /* _CFE_ && BCM_DEVINFO */
 
 #ifdef _CFE_
 /* For NAND boot, flash0.nvram will be changed to nflash0.nvram */
 char *flashdrv_nvram = "flash0.nvram";
 #endif
 
+#if defined(__ECOS)
+extern int kernel_initial;
+#define NVRAM_LOCK()	cyg_scheduler_lock()
+#define NVRAM_UNLOCK()	cyg_scheduler_unlock()
+#else
 #define NVRAM_LOCK()	do {} while (0)
 #define NVRAM_UNLOCK()	do {} while (0)
+#endif
+
+/* Convenience */
+#define KB * 1024
+#define MB * 1024 * 1024
+
+#ifndef NVRAM_RESET_GPIO_WAIT
+#define NVRAM_RESET_GPIO_WAIT	5000 /* in ms */
+#endif
 
 char *
 nvram_get(const char *name)
 {
 	char *value;
+
+#ifdef __ECOS
+	if (!kernel_initial)
+		return NULL;
+#endif
 
 	NVRAM_LOCK();
 	value = _nvram_get(name);
@@ -119,70 +129,27 @@ BCMINITFN(nvram_unset)(const char *name)
 	return ret;
 }
 
-#define WPS_GPIO_BUTTON_VALUE   "wps_button"
-#define BCMGPIO_MAXPINS         32
-
-static int
-findmatch(const char *string, const char *name)
-{
-        uint len;
-        char *c;
-
-        len = strlen(name);
-        while ((c = strchr(string, ',')) != NULL) {
-                if (len == (uint)(c - string) && !strncmp(string, name, len))
-                        return 1;
-                string = c + 1;
-        }
-
-        return (!strcmp(string, name));
-}
-
-int
-bcmgpio_getpin(char *pin_name)
-{
-        char name[] = "gpioXXXX";
-        char *val;
-        uint pin;
-
-        /* Go thru all possibilities till a match in pin name */
-        for (pin = 0; pin < BCMGPIO_MAXPINS; pin ++) {
-                sprintf(name, "gpio%d", pin);
-                val = nvram_get(name);
-                if (val && findmatch(val, pin_name))
-                        return pin;
-        }
-
-        return -1;
-}
-
 int
 BCMINITFN(nvram_resetgpio_init)(void *si)
 {
-#if 0
-        char *value;
-#endif
-        int gpio;
-        si_t *sih;
+	char *value;
+	int gpio;
+	si_t *sih;
 
-        sih = (si_t *)si;
-#if 0
-        value = nvram_get("reset_gpio");
-        if (!value)
-                return -1;
+	sih = (si_t *)si;
 
-        gpio = (int) bcm_atoi(value);
-        if (gpio > 31)
-                return -1;
-#else
-        gpio = bcmgpio_getpin(WPS_GPIO_BUTTON_VALUE);
-        if ((gpio > 31) || (gpio < 0))
-                return -1;
-#endif
-        /* Setup GPIO input */
-        si_gpioouten(sih, ((uint32) 1 << gpio), 0, GPIO_DRV_PRIORITY);
+	value = nvram_get("reset_gpio");
+	if (!value)
+		return -1;
 
-        return gpio;
+	gpio = (int) bcm_atoi(value);
+	if (gpio > 31)
+		return -1;
+
+	/* Setup GPIO input */
+	si_gpioouten(sih, ((uint32) 1 << gpio), 0, GPIO_DRV_PRIORITY);
+
+	return gpio;
 }
 
 int
@@ -196,7 +163,7 @@ BCMINITFN(nvram_reset)(void  *si)
 		return FALSE;
 
 	/* GPIO reset is asserted low */
-	for (msec = 0; msec < 5000; msec++) {
+	for (msec = 0; msec < NVRAM_RESET_GPIO_WAIT; msec++) {
 		if (si_gpioin(sih) & ((uint32) 1 << gpio))
 			return FALSE;
 		OSL_DELAY(1000);
@@ -206,18 +173,18 @@ BCMINITFN(nvram_reset)(void  *si)
 	return TRUE;
 }
 
-static unsigned char flash_nvh[MAX_NVRAM_SPACE];
 #ifdef NFLASH_SUPPORT
+static unsigned char nand_nvh[MAX_NVRAM_SPACE];
 
 static struct nvram_header *
 BCMINITFN(nand_find_nvram)(hndnand_t *nfl, uint32 off)
 {
 	int blocksize = nfl->blocksize;
-	unsigned char *buf = flash_nvh;
-	int rlen = sizeof(flash_nvh);
+	unsigned char *buf = nand_nvh;
+	int rlen = sizeof(nand_nvh);
 	int len;
 
-	for (; off < nfl_boot_size(nfl); off += blocksize) {
+	for (; off < NFL_BOOT_SIZE; off += blocksize) {
 		if (hndnand_checkbadb(nfl, off) != 0)
 			continue;
 
@@ -231,52 +198,17 @@ BCMINITFN(nand_find_nvram)(hndnand_t *nfl, uint32 off)
 		buf += len;
 		rlen -= len;
 		if (rlen == 0)
-			return (struct nvram_header *)flash_nvh;
+			return (struct nvram_header *)nand_nvh;
 	}
 
 	return NULL;
 }
 #endif /* NFLASH_SUPPORT */
 
-static struct nvram_header *
-BCMINITFN(sflash_find_nvram)(si_t *sih, void *flinfo, uint32 off)
-{
-	unsigned char *buf = flash_nvh;
-	uint32 rlen = sizeof(flash_nvh);
-	uint32 flbase = SI_FLASH2, lim = SI_FLASH2_SZ;
-#ifdef _CFE_
-	hndsflash_t *sfl = (hndsflash_t *)flinfo;
-
-	if (sfl) {
-		flbase = sfl->phybase;
-		lim = sfl->size;
-	}
-#endif
-
-	/* direct access to offset if within XIP region(16M) or NorthStar platform */
-	if (off < SI_FLASH_WINDOW || sih->ccrev == 42) {
-		return (struct nvram_header *)OSL_UNCACHED(flbase + off);
-	}
-
-#ifdef _CFE_
-	/* check read size boundary */
-	if (off + rlen > lim) {
-		printf("Out of flash boundary!! off %x rlen %x sfl->size %x\n", off, rlen, lim);
-		return NULL;
-	}
-
-	/* retrieve flash header */
-	if (sfl->read(sfl, off, rlen, buf) == rlen) {
-		return (struct nvram_header *)buf;
-	}
-#endif
-	return NULL;
-}
-
 extern unsigned char embedded_nvram[];
 
 static struct nvram_header *
-BCMATTACHFN(find_nvram)(si_t *sih, bool embonly, bool *isemb)
+BCMINITFN(find_nvram)(si_t *sih, bool embonly, bool *isemb)
 {
 	struct nvram_header *nvh;
 	uint32 off, lim = SI_FLASH2_SZ;
@@ -308,11 +240,9 @@ BCMATTACHFN(find_nvram)(si_t *sih, bool embonly, bool *isemb)
 			lim = sfl_info->size;
 		}
 #else
-		if (sih->ccrev == 42)
-			flbase = SI_NS_NORFLASH;
-		else if (sih->ccrev == 54)
-			flbase = SI_BCM53573_NORFLASH;
-#endif /* _CFE_ */
+	if (sih->ccrev == 42)
+		flbase = SI_NS_NORFLASH;
+#endif
 	}
 
 	if (!embonly) {
@@ -323,7 +253,7 @@ BCMATTACHFN(find_nvram)(si_t *sih, bool embonly, bool *isemb)
 
 			blocksize = nfl_info->blocksize;
 			off = blocksize;
-			for (; off < nfl_boot_size(nfl_info); off += blocksize) {
+			for (; off < NFL_BOOT_SIZE; off += blocksize) {
 				if (hndnand_checkbadb(nfl_info, off) != 0)
 					continue;
 				nvh = (struct nvram_header *)OSL_UNCACHED(flbase + off);
@@ -340,16 +270,11 @@ BCMATTACHFN(find_nvram)(si_t *sih, bool embonly, bool *isemb)
 		else
 #endif /* NFLASH_SUPPORT */
 		{
-			void *flinfo = NULL;
-#ifdef _CFE_
-			flinfo = (void *)sfl_info;
-#endif
 			off = FLASH_MIN;
 			while (off <= lim) {
 				nvh = (struct nvram_header *)
-					sflash_find_nvram(sih, flinfo, off - MAX_NVRAM_SPACE);
-
-				if (nvh && nvh->magic == NVRAM_MAGIC) {
+					OSL_UNCACHED(flbase + off - MAX_NVRAM_SPACE);
+				if (nvh->magic == NVRAM_MAGIC) {
 					if (nvram_calc_crc(nvh) == (uint8) nvh->crc_ver_init) {
 						return (nvh);
 					}
@@ -393,6 +318,11 @@ BCMATTACHFN(nvram_init)(void *si)
 	si_t *sih;
 	static int nvram_status = -1;
 
+#ifdef __ECOS
+	if (!kernel_initial)
+		return 0;
+#endif
+
 	/* Check for previous 'restore defaults' condition */
 	if (nvram_status == 1)
 		return 1;
@@ -407,7 +337,7 @@ BCMATTACHFN(nvram_init)(void *si)
 	if (nvram_do_reset) {
 		/* Initialize with embedded NVRAM */
 		nvram_header = find_nvram(sih, TRUE, &isemb);
-		ret = _nvram_init(si, 0);
+		ret = _nvram_init(si);
 		if (ret == 0) {
 			nvram_status = 1;
 			return 1;
@@ -418,7 +348,7 @@ BCMATTACHFN(nvram_init)(void *si)
 
 	/* Find NVRAM */
 	nvram_header = find_nvram(sih, FALSE, &isemb);
-	ret = _nvram_init(si, 0);
+	ret = _nvram_init(si);
 	if (ret == 0) {
 		/* Restore defaults if embedded NVRAM used */
 		if (nvram_header && isemb) {
@@ -451,12 +381,12 @@ BCMINITFN(nvram_exit)(void *si)
  * free, and the debug code checks if they are valid, so pass NULL as the osh
  * to tell the OSL that we don't have a valid osh
  */
-static void *SzAlloc(const ISzAlloc *p, size_t size) { p = p; return MALLOC(NULL, size); }
-static void SzFree(const ISzAlloc *p, void *address) { p = p; MFREE(NULL, address, 0); }
+static void *SzAlloc(void *p, size_t size) { p = p; return MALLOC(NULL, size); }
+static void SzFree(void *p, void *address) { p = p; MFREE(NULL, address, 0); }
 static ISzAlloc g_Alloc = { SzAlloc, SzFree };
 
 int
-BCMINITFN(_nvram_read)(void *buf, int idx)
+BCMINITFN(_nvram_read)(void *buf)
 {
 	uint32 *src, *dst;
 	uint i;
@@ -464,16 +394,7 @@ BCMINITFN(_nvram_read)(void *buf, int idx)
 	if (!nvram_header)
 		return -19; /* -ENODEV */
 
-#if defined(_CFE_) && defined(BCM_DEVINFO)
-	if ((!devinfo_nvram_header) && (idx == 1)) {
-		return -19; /* -ENODEV */
-	}
-
-	src = idx == 0 ? (uint32 *) nvram_header : (uint32 *) devinfo_nvram_nvh;
-#else
 	src = (uint32 *) nvram_header;
-#endif /* _CFE_ && BCM_DEVINFO */
-
 	dst = (uint32 *) buf;
 
 	for (i = 0; i < sizeof(struct nvram_header); i += 4)
@@ -548,6 +469,29 @@ BCMINITFN(_nvram_free)(struct nvram_tuple *t)
 		      strlen(t->value) + 1);
 }
 
+#ifdef __ECOS
+int
+BCMINITFN(nvram_reinit_hash)(void)
+{
+	struct nvram_header *header;
+	int ret;
+
+	if (!(header = (struct nvram_header *) MALLOC(NULL, MAX_NVRAM_SPACE))) {
+		printf("nvram_reinit_hash: out of memory\n");
+		return -12; /* -ENOMEM */
+	}
+
+	NVRAM_LOCK();
+
+	/* Regenerate NVRAM */
+	ret = _nvram_commit(header);
+
+	NVRAM_UNLOCK();
+	MFREE(NULL, header, MAX_NVRAM_SPACE);
+	return ret;
+}
+#endif /* __ECOS */
+
 int
 BCMINITFN(nvram_commit_internal)(bool nvram_corrupt)
 {
@@ -612,52 +556,3 @@ BCMINITFN(nvram_commit)(void)
 	/* do not corrupt nvram */
 	return nvram_commit_internal(FALSE);
 }
-
-#if defined(_CFE_) && defined(BCM_DEVINFO)
-static struct nvram_header *
-BCMINITFN(find_devinfo_nvram)(si_t *sih)
-{
-	int cfe_fd, ret;
-
-	if (devinfo_nvram_header != NULL) {
-		return (devinfo_nvram_header);
-	}
-
-	if ((cfe_fd = cfe_open(devinfo_flashdrv_nvram)) < 0) {
-		return NULL;
-	}
-
-	ret = cfe_read(cfe_fd, (unsigned char *)devinfo_nvram_nvh,  NVRAM_SPACE);
-	if (ret >= 0) {
-		devinfo_nvram_header = (struct nvram_header *) devinfo_nvram_nvh;
-	}
-
-	cfe_close(cfe_fd);
-
-	return (devinfo_nvram_header);
-}
-
-int
-BCMINITFN(devinfo_nvram_init)(void *si)
-{
-	int ret;
-	si_t *sih = (si_t *)si;
-
-	nvram_header = find_devinfo_nvram(sih);
-	_nvram_hash_select(1);
-	ret =  _nvram_init(si, 1);
-	_nvram_hash_select(0);
-
-	return (ret);
-}
-
-/* sync nvram hash table with devinfo nvram hash table, and commit nvram */
-int
-BCMINITFN(devinfo_nvram_sync)(void)
-{
-	_nvram_hash_sync();
-	nvram_commit();
-
-	return (0);
-}
-#endif /* _CFE_ && BCM_DEVINFO */

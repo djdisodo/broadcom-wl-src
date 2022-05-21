@@ -1,7 +1,7 @@
 /*
  * DDR23 Denali contoller & DDRPHY init routines.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -31,14 +31,9 @@
 
 #include <ddr40_phy_init.h>
 #include <shmoo_public.h>
-#include <bcm5301x_otp.h>
 
 
 #define DDR_DEFAULT_CLOCK	333
-#define DDR3_MIN_CLOCK		400
-
-#define OTPP_TRIES	10000000	/* # of tries for OTPP */
-#define DEFAULT_OTPCPU_CTRL0 0x00a00600
 
 extern void si_mem_setclock(si_t *sih, uint32 ddrclock);
 
@@ -586,7 +581,7 @@ unsigned int ddr3_init_tab_1600[] = {
 	0,	0x00000600,
 	1,	0x00000000,
 	3,	0x000000a0,
-	4,	0x00061a80,
+	4,	0x00000190,
 	5,	0x16081600,
 	6,	0x06040408,
 	7,	0x0b061c27,
@@ -844,269 +839,6 @@ out:
 	return nRet;
 }
 
-static int
-_check_cmd_done(void)
-{
-	unsigned int k;
-	uint32 st;
-
-	for (k = 0; k < OTPP_TRIES; k++) {
-		st = R_REG(NULL, (uint32 *)DMU_OTP_CPU_STS);
-		if (st & OTPCPU_STS_CMD_DONE_MASK) {
-		    break;
-		}
-	}
-	if (k >= OTPP_TRIES) {
-		printf("%s: %d _check_cmd_done: %08x\n", __FUNCTION__, __LINE__, k);
-		return -1;
-	}
-	return 0;
-}
-
-
-static int
-_issue_read(unsigned int row, uint32 *val)
-{
-	uint32 ctrl1, ctrl0;
-	uint32 start;
-	uint32 cmd;
-	uint32 fuse;
-	uint32 cof;
-	uint32 prog_en;
-	uint32 mode;
-	int rv;
-
-
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_ADDR, row);
-
-	start = (1 << OTPCPU_CTRL1_START_SHIFT) & OTPCPU_CTRL1_START_MASK;
-	cmd = (OTPCPU_CMD_READ << OTPCPU_CTRL1_CMD_SHIFT) & OTPCPU_CTRL1_CMD_MASK;
-	fuse = (1 << OTPCPU_CTRL1_2XFUSE_SHIFT) & OTPCPU_CTRL1_2XFUSE_MASK;
-	cof = (2 << OTPCPU_CTRL1_COF_SHIFT) & OTPCPU_CTRL1_COF_MASK;
-	prog_en = (0 << OTPCPU_CTRL1_PROG_EN_SHIFT) & OTPCPU_CTRL1_PROG_EN_MASK;
-	mode = (1 << OTPCPU_CTRL1_ACCESS_MODE_SHIFT) & OTPCPU_CTRL1_ACCESS_MODE_MASK;
-
-	ctrl1 = cmd;
-	ctrl1 |= fuse;
-	ctrl1 |= cof;
-	ctrl1 |= prog_en;
-	ctrl1 |= mode;
-
-	ctrl1 |= start;
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL1, ctrl1);
-	ctrl0 = DEFAULT_OTPCPU_CTRL0;
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL0, ctrl0);
-
-	/* Check if cmd_done bit is asserted */
-	rv = _check_cmd_done();
-	if (rv) {
-		printf("%s: %d _check_cmd_done: %08x\n", __FUNCTION__, __LINE__, rv);
-	    return -1;
-	}
-
-	*val = R_REG(NULL, (uint32 *)DMU_OTP_CPU_READ_DATA);
-
-	return 0;
-}
-
-
-static int
-_issue_prog_dis(void)
-{
-	uint32 ctrl1, ctrl0;
-	uint32 start;
-	uint32 cmd;
-	uint32 fuse;
-	uint32 cof;
-	uint32 prog_en;
-	uint32 mode;
-	int rv;
-
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_ADDR, 0);
-
-	start = (1 << OTPCPU_CTRL1_START_SHIFT) & OTPCPU_CTRL1_START_MASK;
-	cmd = (OTPCPU_CMD_PROG_DIS << OTPCPU_CTRL1_CMD_SHIFT) & OTPCPU_CTRL1_CMD_MASK;
-	fuse = (1 << OTPCPU_CTRL1_2XFUSE_SHIFT) & OTPCPU_CTRL1_2XFUSE_MASK;
-	cof = (1 << OTPCPU_CTRL1_COF_SHIFT) & OTPCPU_CTRL1_COF_MASK;
-	prog_en = (1 << OTPCPU_CTRL1_PROG_EN_SHIFT) & OTPCPU_CTRL1_PROG_EN_MASK;
-	mode = (2 << OTPCPU_CTRL1_ACCESS_MODE_SHIFT) & OTPCPU_CTRL1_ACCESS_MODE_MASK;
-
-	ctrl1 = cmd;
-	ctrl1 |= fuse;
-	ctrl1 |= cof;
-	ctrl1 |= prog_en;
-	ctrl1 |= mode;
-
-	ctrl1 |= start;
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL1, ctrl1);
-	ctrl0 = DEFAULT_OTPCPU_CTRL0;
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL0, ctrl0);
-
-	/* Check if cmd_done bit is asserted */
-	rv = _check_cmd_done();
-	if (rv) {
-		printf("%s: %d _check_cmd_done: %08x\n", __FUNCTION__, __LINE__, rv);
-		return -1;
-	}
-
-	ctrl1 &= ~start;
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL1, ctrl1);
-	W_REG(NULL, (uint32 *)DMU_OTP_CPU_CTRL0, ctrl0);
-
-	return 0;
-}
-
-int
-bcm5301x_otp_read_dword(unsigned int wn, uint32 *data)
-{
-	uint32 cpu_cfg;
-	int rv;
-
-	/* Check if CPU mode is enabled */
-	cpu_cfg = R_REG(NULL, (uint32 *)DMU_OTP_CPU_CONFIG);
-	if (!(cpu_cfg & OTPCPU_CFG_CPU_MODE_MASK)) {
-		cpu_cfg |= ((1 << OTPCPU_CFG_CPU_MODE_SHIFT) & OTPCPU_CFG_CPU_MODE_MASK);
-		W_REG(NULL, (uint32 *)DMU_OTP_CPU_CONFIG, cpu_cfg);
-	}
-	cpu_cfg = R_REG(NULL, (uint32 *)DMU_OTP_CPU_CONFIG);
-
-	/* Issue ProgDisable command */
-	rv = _issue_prog_dis();
-	if (rv) {
-		printf("%s: %d _issue_prog_dis failed: %d\n", __FUNCTION__, __LINE__, rv);
-		return -1;
-	}
-
-	/* Issue ReadWord command */
-	rv = _issue_read(wn, data);
-	if (rv) {
-		printf("%s: %d _issue_read failed: %d\n", __FUNCTION__, __LINE__, rv);
-		return -1;
-	}
-
-	return 0;
-}
-
-int
-Program_Digital_Core_Power_Voltage(si_t *sih)
-{
-#define ROW_NUMBER 0x8
-#define MDC_DIV 0x8
-#define DIGITAL_POWER_CORE_VOLTAGE_1_POINT_05V	0x520E003C
-#define DIGITAL_POWER_CORE_VOLTAGE_1V		0x520E0020
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_975V	0x520E0018
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_9625V	0x520E0014
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_95V	0x520E0010
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_9375V	0x520E000C
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_925V	0x520E0008
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_9125V	0x520E0004
-#define DIGITAL_POWER_CORE_VOLTAGE_POINT_9V	0x520E0000
-#define AVS_CODE_RS 17
-#define AVS_CODE_MASK 7
-
-	osl_t *osh;
-	chipcommonbregs_t *chipcb;
-	uint32 avs_code = 0;
-	int retval = 0;
-	char *vol_str = NULL;
-
-	osh = si_osh(sih);
-	chipcb = (chipcommonbregs_t *)si_setcore(sih, NS_CCB_CORE_ID, 0);
-	if (chipcb == NULL) {
-		retval = -1;
-		printf("%s: %d chipcb null %d\n", __FUNCTION__, __LINE__, retval);
-		return retval;
-	}
-
-	if (CHIPID(sih->chip) == BCM4707_CHIP_ID || CHIPID(sih->chip) == BCM47094_CHIP_ID) {
-		if (sih->chippkg == BCM4708_PKG_ID) {
-			/* access internal regulator phy by setting the MDC/MDIO
-			 * bus frequency to 125/8
-			 */
-			W_REG(osh, &chipcb->pcu_mdio_mgt, MDC_DIV);
-			udelay(500);
-			/* this is 0.9 V */
-			W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_9375V);
-			printf("Digital core power voltage set to 0.9375V\n");
-			return retval;
-		} else if ((CHIPID(sih->chip) == BCM47094_CHIP_ID) &&
-			(sih->chippkg == BCM4709_PKG_ID)) {
-			W_REG(osh, &chipcb->pcu_mdio_mgt, MDC_DIV);
-			udelay(500);
-			/* this is 1.05 V */
-			W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_1_POINT_05V);
-			printf("Digital core power voltage set to 1.05V\n");
-			return retval;
-		}
-	}
-
-	retval = bcm5301x_otp_read_dword(ROW_NUMBER, &avs_code);
-	if (retval != 0) {
-		printf("%s: %d failed bcm5301x_otp_read_dword: %d\n",
-			__FUNCTION__, __LINE__, retval);
-		return retval;
-	}
-
-
-	/* bits 17 - 19 is the avs code */
-	avs_code = (avs_code >> AVS_CODE_RS) & AVS_CODE_MASK;
-
-	/* access internal regulator phy by setting the MDC/MDIO bus frequency to 125/8 */
-	W_REG(osh, &chipcb->pcu_mdio_mgt, MDC_DIV);
-	udelay(500);
-
-	switch (avs_code) {
-	case 0:
-		/* this is 1 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_1V);
-		vol_str = "1.0";
-		break;
-	case 1:
-		/* this is 0.975 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_975V);
-		vol_str = "0.975";
-		break;
-	case 2:
-		/* this is 0.9625 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_9625V);
-		vol_str = "0.9625";
-		break;
-	case 3:
-		/* this is 0.95 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_95V);
-		vol_str = "0.95";
-		break;
-	case 4:
-		/* this is 0.9375 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_9375V);
-		vol_str = "0.9375";
-		break;
-	case 5:
-		/* this is 0.925 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_925V);
-		vol_str = "0.925";
-		break;
-	case 6:
-		/* this is 0.9125 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_9125V);
-		vol_str = "0.9125";
-		break;
-	case 7:
-		/* this is 0.9 V */
-		W_REG(osh, &chipcb->pcu_mdio_cmd, DIGITAL_POWER_CORE_VOLTAGE_POINT_9V);
-		vol_str = "0.9";
-		break;
-	default:
-		printf("%s: %d unrecognized avs_code %d\n", __FUNCTION__, __LINE__, avs_code);
-		break;
-	}
-
-	if (vol_str)
-		printf("Digital core power voltage set to %sV\n", vol_str);
-
-	return retval;
-}
-
 void
 c_ddr_init(unsigned long ra)
 {
@@ -1118,7 +850,6 @@ c_ddr_init(unsigned long ra)
 	struct nvram_header *nvh = NULL;
 	uintptr flbase;
 	uint32 off, sdram_config, sdram_ncdl;
-	uint32 config_refresh, sdram_refresh;
 	ddrcregs_t *ddr;
 	chipcommonbregs_t *chipcb;
 	uint32 val, val1;
@@ -1134,8 +865,6 @@ c_ddr_init(unsigned long ra)
 #ifdef BCMDBG
 	printf("\n==================== CFE Boot Loader ====================\n");
 #endif
-
-	Program_Digital_Core_Power_Voltage(sih);
 
 	regs = (void *)si_setcore(sih, NS_DDR23_CORE_ID, 0);
 	if (regs) {
@@ -1166,11 +895,7 @@ c_ddr_init(unsigned long ra)
 	ddr = (ddrcregs_t *)si_setcore(sih, NS_DDR23_CORE_ID, 0);
 	if (!ddr)
 		goto out;
-	val = R_REG(osh, (uint32 *)DDR_S1_IDM_RESET_CONTROL);
-	if ((val & AIRC_RESET) == 0)
-		val = R_REG(osh, &ddr->control[0]);
-	else
-		val = 0;
+	val = R_REG(osh, &ddr->control[0]);
 	if (val & DDRC00_START) {
 		clkval = *((uint32 *)(0x1000 + BISZ_OFFSET - 4));
 		if (clkval) {
@@ -1180,10 +905,6 @@ c_ddr_init(unsigned long ra)
 			ddrclock = clkval;
 			si_mem_setclock(sih, ddrclock);
 		}
-	} else {
-		/* DDR PHY doesn't support 333MHz for DDR3, so set the clock to 400 by default. */
-		ddrclock = DDR3_MIN_CLOCK;
-		si_mem_setclock(sih, ddrclock);
 	}
 
 	/* Find NVRAM for the sdram_config variable */
@@ -1209,16 +930,14 @@ c_ddr_init(unsigned long ra)
 	}
 #ifdef NFLASH_SUPPORT
 embedded_nv:
-#endif
+#endif /* NFLASH_SUPPORT */
 	if (nvh == NULL) {
 		nvh = (struct nvram_header *)(flbase + 1024);
 		if (R_REG(osh, &nvh->magic) != NVRAM_MAGIC) {
 			goto out;
 		}
 	}
-	config_refresh = R_REG(osh, &nvh->config_refresh);
-	sdram_config = config_refresh & 0xffff;
-	sdram_refresh = (config_refresh >> 16) & 0xffff;
+	sdram_config = R_REG(osh, &nvh->config_refresh) & 0xffff;
 	sdram_ncdl = R_REG(osh, &nvh->config_ncdl);
 #ifdef BCMDBG
 	printf("%s: sdram_config=0x%04x sdram_ncdl=0x%08x\n",
@@ -1241,11 +960,8 @@ embedded_nv:
 			break; /* DDR PHY is up */
 	}
 	if (i == 0x19000) {
-#ifdef BCMDBG
-		printf("Recalibrating DDR PHY...\n");
-#endif
-		si_watchdog(sih, 1);
-		while (1);
+		printf("DDR PHY is not up\n");
+		goto out;
 	}
 
 	/* Change PLL divider values inside PHY */
@@ -1330,12 +1046,23 @@ embedded_nv:
 			goto out;
 		}
 
-		if (!(val & 0x2)) {
-#ifdef BCMDBG
-			printf("Need re-calibrating...\n");
-#endif
-			si_watchdog(sih, 1);
-			while (1);
+		if (!(R_REG(osh, &ddr->phy_control_vdl_calibsts) & 0x2)) {
+			/* Auto calibration failed, do the override */
+			printf("Auto calibration failed, do the override\n");
+			W_REG(osh, &ddr->phy_control_vdl_ovride_bitctl, 0x0001003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit0_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit1_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit2_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit3_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit4_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit5_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit6_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_bit7_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_dm_w, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_r_p, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte0_r_n, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte1_r_p, 0x0003003f);
+			W_REG(osh, &ddr->phy_ln0_vdl_ovride_byte1_r_n, 0x0003003f);
 		}
 	}
 
@@ -1353,17 +1080,14 @@ embedded_nv:
 	}
 
 	/* Set Tref */
-	if (sdram_refresh == 0)
-		sdram_refresh = (0x1858 * ddrclock) / 800;
-
 	val = R_REG(osh, &ddr->control[21]);
 	val &= ~0x3fff;
-	val |= sdram_refresh & 0x3fff;
+	val |= ((0x1858*ddrclock)/800) & 0x3fff;
 	W_REG(osh, &ddr->control[21], val);
 
 	val = R_REG(osh, &ddr->control[22]);
 	val &= ~0x3fff;
-	val |= sdram_refresh & 0x3fff;
+	val |= ((0x1858*ddrclock)/800) & 0x3fff;
 	W_REG(osh, &ddr->control[22], val);
 
 	if (sdram_config) {
@@ -1391,10 +1115,7 @@ embedded_nv:
 
 		/* Now do CAS latency settings */
 		cas = sdram_config & 0x1f;
-		if (cas > 5)
-			wrlat = cas - (cas-4)/2;
-		else
-			wrlat = cas - 1;
+		wrlat = cas - (cas-4)/2;
 
 		val = R_REG(osh, &ddr->control[5]);
 		val &= ~0x3f1f3f00;
@@ -1456,7 +1177,7 @@ embedded_nv:
 	W_REG(osh, &ddr->phy_ln0_rddata_dly, 3);	/* high sku? */
 
 	/* Run the SHMOO */
-	if (ddrtype_ddr3 && ddrclock > DDR3_MIN_CLOCK) {
+	if (ddrtype_ddr3 && ddrclock != DDR_DEFAULT_CLOCK) {
 		status = do_shmoo((void *)sih, DDR_PHY_CONTROL_REGS_REVISION, 0,
 			((26 << 16) | (16 << 8) | DO_ALL_SHMOO), 0x1000000);
 		if (status != SHMOO_NO_ERROR) {

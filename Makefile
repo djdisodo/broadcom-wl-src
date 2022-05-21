@@ -133,7 +133,7 @@ obj-m              += wl.o
 
 wl-objs            :=
 wl-objs            += src/shared/linux_osl.o
-#wl-objs            += src/wl/sys/wl_linux.o
+wl-objs            += src/wl/sys/wl_linux.o
 #wl-objs            += src/wl/sys/wl_iw.o
 #wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
 
@@ -149,9 +149,12 @@ wl-objs            += src/shared/nvram_rw.o
 wl-objs            += src/shared/bcmotp.o
 
 EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/LZMA-SDK/C
-EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include -I$(src)/src/math/include
+EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/phy
 EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
-EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib
+EXTRA_CFLAGS       += -I$(src)/src/wl/phy
+EXTRA_CFLAGS       += -I$(src)/src/wl/ppr/include
+EXTRA_CFLAGS       += -I$(src)/src/wl/clm/include
+EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib -DWL11H -DWLC_HIGH -DAP -DSTA -DLINUX_HYBRID -DDSLCPE
 
 #idk wtf
 EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A

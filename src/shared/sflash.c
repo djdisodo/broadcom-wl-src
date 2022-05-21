@@ -1,7 +1,7 @@
 /*
  * Broadcom SiliconBackplane chipcommon serial flash interface
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: sflash.c 477504 2014-05-13 20:26:46Z $
+ * $Id: sflash.c 345824 2012-07-19 06:29:12Z $
  */
 
 #include <bcm_cfg.h>
@@ -263,9 +263,9 @@ sflash_read(si_t *sih, chipcregs_t *cc, uint offset, uint len, uchar *buf)
 		cnt = len;
 
 	if (sih->ccrev == 12)
-		from = (uint8 *)OSL_UNCACHED(((uint8 *)SI_FLASH2 + offset));
+		from = (uint8 *)OSL_UNCACHED((void *)SI_FLASH2 + offset);
 	else
-		from = (uint8 *)OSL_CACHED(((uint8 *)SI_FLASH2 + offset));
+		from = (uint8 *)OSL_CACHED((void *)SI_FLASH2 + offset);
 	to = (uint8 *)buf;
 
 	if (cnt < 4) {

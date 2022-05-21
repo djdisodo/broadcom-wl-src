@@ -2,7 +2,7 @@
  * Initialization and support routines for self-booting
  * compressed image.
  *
- * Copyright (C) 2015, Broadcom Corporation. All Rights Reserved.
+ * Copyright (C) 2012, Broadcom Corporation. All Rights Reserved.
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: load.c 566663 2015-06-25 11:21:26Z $
+ * $Id: load.c 368663 2012-11-14 09:42:37Z $
  */
 
 #include <typedefs.h>
@@ -28,7 +28,7 @@
 #include <siutils.h>
 #include <sbchipc.h>
 #include <bcmnvram.h>
-#ifdef CCNFLASH_SUPPORT
+#ifdef NFLASH_SUPPORT
 #include <nflash.h>
 #endif
 
@@ -309,18 +309,18 @@ load(si_t *sih)
 static void
 set_sflash_div(si_t *sih)
 {
-	uint idx = si_coreidx(sih);
-	osl_t *osh = si_osh(sih);
+	uint idx;
 	chipcregs_t *cc;
 	struct nvram_header *nvh = NULL;
 	uintptr flbase;
 	uint32 fltype, off, clkdiv, bpclock, sflmaxclk, sfldiv;
 
 	/* Check for sflash */
+	idx = si_coreidx(sih);
 	cc = si_setcoreidx(sih, SI_CC_IDX);
 	ASSERT(cc);
 
-#ifdef CCNFLASH_SUPPORT
+#ifdef NFLASH_SUPPORT
 	if ((sih->ccrev == 38) && ((sih->chipst & (1 << 4)) != 0))
 		goto out;
 #endif /* NFLASH_SUPPORT */
@@ -328,20 +328,13 @@ set_sflash_div(si_t *sih)
 	if ((fltype != SFLASH_ST) && (fltype != SFLASH_AT))
 		goto out;
 
-	if (BCM53573_CHIP(sih->chip)) {
-		clkdiv = R_REG(osh, &cc->clkdiv);
-		clkdiv = (clkdiv & ~CLKD_SFLASH) | (6 << CLKD_SFLASH_SHIFT);
-		W_REG(osh, &cc->clkdiv, clkdiv);
-		goto out;
-	}
-
 	flbase = (uintptr)OSL_UNCACHED((void *)SI_FLASH2);
 	off = FLASH_MIN;
 	while (off <= 16 * 1024 * 1024) {
 		nvh = (struct nvram_header *)(flbase + off - MAX_NVRAM_SPACE);
 		if (R_REG(osh, &nvh->magic) == NVRAM_MAGIC)
 			break;
-		off +=  DEF_NVRAM_SPACE;
+		off += DEF_NVRAM_SPACE;
 		nvh = NULL;
 	};
 
@@ -403,27 +396,14 @@ c_main(unsigned long ra)
 
 	BCMDBG_TRACE(0x4c4402);
 
-	/* Put I2S core out of reset for 53573A0 GPIO/FEMCTRL */
-	if (BCM53573_CHIP(sih->chip) && CHIPREV(sih->chiprev) == 0) {
-		uint origidx = si_coreidx(sih);
-
-		if (si_setcore(sih, I2S_CORE_ID, 0) != NULL) {
-			if (!si_iscoreup(sih)) {
-				si_core_reset(sih, 0, 0);
-			}
-		}
-		si_setcoreidx(sih, origidx);
-	}
-
 	/* Only do this for 4716, we need to reuse the
 	 * space in the nvram header for TREF on 5357.
 	 */
 	if ((CHIPID(sih->chip) == BCM4716_CHIP_ID) ||
 	    (CHIPID(sih->chip) == BCM4748_CHIP_ID) ||
-	    (CHIPID(sih->chip) == BCM47162_CHIP_ID) ||
-	    (BCM53573_CHIP(sih->chip))) {
+	    (CHIPID(sih->chip) == BCM47162_CHIP_ID))
 		set_sflash_div(sih);
-	}
+
 	BCMDBG_TRACE(0x4c4403);
 
 	/* Load binary */
