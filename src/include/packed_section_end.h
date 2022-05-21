@@ -28,14 +28,46 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- * $Id: packed_section_end.h 395414 2013-04-07 19:26:09Z $
+ * $Id: packed_section_end.h 436799 2013-11-15 07:42:54Z $
  */
 
+
+/* Error check - BWL_PACKED_SECTION is defined in packed_section_start.h
+ * and undefined in packed_section_end.h. If it is NOT defined at this
+ * point, then there is a missing include of packed_section_start.h.
+ */
 #ifdef BWL_PACKED_SECTION
 	#undef BWL_PACKED_SECTION
 #else
 	#error "BWL_PACKED_SECTION is NOT defined!"
 #endif
 
+
+#if defined(_MSC_VER)
+	/* Disable compiler warning about pragma pack changing alignment. */
+	#pragma warning(disable:4103)
+
+	/* The Microsoft compiler uses pragmas for structure packing. Other
+	 * compilers use structure attribute modifiers. Refer to
+	 * BWL_PRE_PACKED_STRUCT and BWL_POST_PACKED_STRUCT defined in
+	 * typedefs.h
+	 */
+	#if defined(BWL_DEFAULT_PACKING)
+		/* require default structure packing */
+		#pragma pack(pop)
+		#undef BWL_DEFAULT_PACKING
+	#else   /* BWL_PACKED_SECTION */
+		#pragma pack()
+	#endif   /* BWL_PACKED_SECTION */
+#endif   /* _MSC_VER */
+
+#if defined(__GNUC__) && defined(EFI)
+#pragma pack(pop)
+#endif
+
+/* Compiler-specific directives for structure packing are declared in
+ * packed_section_start.h. This marks the end of the structure packing section,
+ * so, undef them here.
+ */
 #undef	BWL_PRE_PACKED_STRUCT
 #undef	BWL_POST_PACKED_STRUCT

@@ -133,33 +133,52 @@ obj-m              += wl.o
 
 wl-objs            :=
 wl-objs            += src/shared/linux_osl.o
-wl-objs            += src/wl/sys/wl_linux.o
-wl-objs            += src/wl/sys/wl_iw.o
-wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
+#wl-objs            += src/wl/sys/wl_linux.o
+#wl-objs            += src/wl/sys/wl_iw.o
+#wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
 
-EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/src/common/include
-EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include
+wl-objs            += src/shared/bcmutils.o
+wl-objs            += src/shared/siutils.o
+wl-objs            += src/shared/sbutils.o
+wl-objs            += src/shared/hndpmu.o
+wl-objs            += src/shared/hnddma.o
+wl-objs            += src/shared/nicpci.o
+wl-objs            += src/shared/aiutils.o
+wl-objs            += src/shared/bcmsrom.o
+wl-objs            += src/shared/nvram_ro.o
+wl-objs            += src/shared/bcmotp.o
+
+EXTRA_CFLAGS       += -I$(src)/src/include
+EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include -I$(src)/src/math/include
 EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
+EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib
+
+#idk wtf
+EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A
+
 #EXTRA_CFLAGS       += -DBCMDBG_ASSERT -DBCMDBG_ERR
 ifeq "$(GE_49)" "1"
 EXTRA_CFLAGS       += -Wno-date-time
 endif
 
-EXTRA_LDFLAGS      := $(src)/lib/wlc_hybrid.o_shipped
+EXTRA_LDFLAGS      := $(src)/lib/wl_preprocessed.o
 
 KBASE              ?= /lib/modules/`uname -r`
 KBUILD_DIR         ?= $(KBASE)/build
 MDEST_DIR          ?= $(KBASE)/kernel/drivers/net/wireless
 
 # Cross compile setup.  Tool chain and kernel tree, replace with your own.
-CROSS_TOOLS        = /path/to/tools
-CROSS_KBUILD_DIR   = /path/to/kernel/tree
+CROSS_TOOLS        = /home/sodo/openwrt/staging_dir/toolchain-arm_cortex-a9_gcc-11.2.0_musl_eabi/bin/arm-openwrt-linux-
+CROSS_KBUILD_DIR   = /home/sodo/openwrt/build_dir/target-arm_cortex-a9_musl_eabi/linux-bcm53xx_generic/linux-5.10.113
+KBUILD_EXTRA_SYMBOLS := $(src)/emf/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(src)/igs/Module.symvers
 
 all:
 	KBUILD_NOPEDANTIC=1 make -C $(KBUILD_DIR) M=`pwd`
 
 cross:
-	KBUILD_NOPEDANTIC=1 make CROSS_COMPILE=${CROSS_TOOLS} -C $(CROSS_KBUILD_DIR) M=`pwd`
+	
+	KBUILD_NOPEDANTIC=1 ARCH=arm make CROSS_COMPILE=${CROSS_TOOLS} -C $(CROSS_KBUILD_DIR) M=`pwd`
 
 clean:
 	KBUILD_NOPEDANTIC=1 make -C $(KBUILD_DIR) M=`pwd` clean

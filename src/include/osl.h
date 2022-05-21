@@ -15,21 +15,27 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: osl.h 431503 2013-10-23 21:42:47Z $
+ * $Id: osl.h 552901 2015-04-28 09:13:27Z $
  */
 
 #ifndef _osl_h_
 #define _osl_h_
 
-typedef struct osl_info osl_t;
-typedef struct osl_dmainfo osldma_t;
+#include <osl_decl.h>
 
-#define OSL_PKTTAG_SZ	32 
+#define OSL_PKTTAG_SZ	32 /* Size of PktTag */
 
+/* Drivers use PKTFREESETCB to register a callback function when a packet is freed by OSL */
 typedef void (*pktfree_cb_fn_t)(void *ctx, void *pkt, unsigned int status);
 
+/* Drivers use REGOPSSET() to register register read/write funcitons */
 typedef unsigned int (*osl_rreg_fn_t)(void *ctx, volatile void *reg, unsigned int size);
 typedef void  (*osl_wreg_fn_t)(void *ctx, volatile void *reg, unsigned int val, unsigned int size);
+
+#if defined(BCM_BACKPLANE_TIMEOUT) && defined(BCMDBG)
+extern void setCurMap(osl_t *osh, void *curmap);
+extern unsigned int read_bpt_reg(osl_t *osh, volatile void *r, unsigned int size);
+#endif /* #if defined(BCM_BACKPLANE_TIMEOUT) && defined(BCMDBG) */
 
 #ifdef __mips__
 #define PREF_LOAD		0
@@ -74,59 +80,162 @@ MAKE_PREFETCH_FN(PREF_LOAD_RETAINED)
 MAKE_PREFETCH_RANGE_FN(PREF_LOAD_RETAINED)
 MAKE_PREFETCH_FN(PREF_STORE_RETAINED)
 MAKE_PREFETCH_RANGE_FN(PREF_STORE_RETAINED)
-#endif 
+#endif /* __mips__ */
 
+#if  defined(DOS)
+#include <dos_osl.h>
+#elif defined(PCBIOS)
+#include <pcbios_osl.h>
+#elif defined(linux)
 #include <linux_osl.h>
+#elif defined(NDIS)
+#include <ndis_osl.h>
+#elif defined(_CFE_)
+#include <cfe_osl.h>
+#elif defined(_RTE_)
+#include <rte_osl.h>
+#elif defined(_MINOSL_)
+#include <min_osl.h>
+#elif defined(MACOSX)
+#include <macosx_osl.h>
+#elif defined(__NetBSD__)
+#include <bsd_osl.h>
+#elif defined(__FreeBSD__)
+#include <fbsd_osl.h>
+#elif defined(EFI)
+#include <efi_osl.h>
+#elif defined(TARGETOS_nucleus)
+#include <nucleus_osl.h>
+#elif defined(TARGETOS_symbian)
+#include <symbian_osl.h>
+#else
+#error "Unsupported OSL requested"
+#endif /* defined(DOS) */
 
 #ifndef PKTDBG_TRACE
-#define PKTDBG_TRACE(osh, pkt, bit)
+#define PKTDBG_TRACE(osh, pkt, bit)	BCM_REFERENCE(osh)
 #endif
 
-#define PKTCTFMAP(osh, p)
+#ifndef PKTCTFMAP
+#define PKTCTFMAP(osh, p)		BCM_REFERENCE(osh)
+#endif /* PKTCTFMAP */
+
+/* --------------------------------------------------------------------------
+** Register manipulation macros.
+*/
 
 #define	SET_REG(osh, r, mask, val)	W_REG((osh), (r), ((R_REG((osh), r) & ~(mask)) | (val)))
 
 #ifndef AND_REG
 #define AND_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) & (v))
-#endif   
+#endif   /* !AND_REG */
 
 #ifndef OR_REG
 #define OR_REG(osh, r, v)		W_REG(osh, (r), R_REG(osh, r) | (v))
-#endif   
+#endif   /* !OR_REG */
 
 #if !defined(OSL_SYSUPTIME)
 #define OSL_SYSUPTIME() (0)
 #define OSL_SYSUPTIME_SUPPORT FALSE
 #else
 #define OSL_SYSUPTIME_SUPPORT TRUE
-#endif 
+#endif /* OSL_SYSUPTIME */
 
-#if !defined(PKTC_DONGLE)
-#define	PKTCGETATTR(s)		(0)
-#define	PKTCSETATTR(skb, f, p, b)
-#define	PKTCCLRATTR(skb)
+#ifndef OSL_SYS_HALT
+#define OSL_SYS_HALT()	do {} while (0)
+#endif
+
+#if !(defined(linux) && defined(PKTC)) && !defined(PKTC_DONGLE) && \
+	!(defined(__NetBSD__) && defined(PKTC))
+#define	PKTCGETATTR(skb)	(0)
+#define	PKTCSETATTR(skb, f, p, b) BCM_REFERENCE(skb)
+#define	PKTCCLRATTR(skb)	BCM_REFERENCE(skb)
 #define	PKTCCNT(skb)		(1)
 #define	PKTCLEN(skb)		PKTLEN(NULL, skb)
 #define	PKTCGETFLAGS(skb)	(0)
-#define	PKTCSETFLAGS(skb, f)
-#define	PKTCCLRFLAGS(skb)
+#define	PKTCSETFLAGS(skb, f)	BCM_REFERENCE(skb)
+#define	PKTCCLRFLAGS(skb)	BCM_REFERENCE(skb)
 #define	PKTCFLAGS(skb)		(0)
-#define	PKTCSETCNT(skb, c)
-#define	PKTCINCRCNT(skb)
-#define	PKTCADDCNT(skb, c)
-#define	PKTCSETLEN(skb, l)
-#define	PKTCADDLEN(skb, l)
-#define	PKTCSETFLAG(skb, fb)
-#define	PKTCCLRFLAG(skb, fb)
+#define	PKTCSETCNT(skb, c)	BCM_REFERENCE(skb)
+#define	PKTCINCRCNT(skb)	BCM_REFERENCE(skb)
+#define	PKTCADDCNT(skb, c)	BCM_REFERENCE(skb)
+#define	PKTCSETLEN(skb, l)	BCM_REFERENCE(skb)
+#define	PKTCADDLEN(skb, l)	BCM_REFERENCE(skb)
+#define	PKTCSETFLAG(skb, fb)	BCM_REFERENCE(skb)
+#define	PKTCCLRFLAG(skb, fb)	BCM_REFERENCE(skb)
 #define	PKTCLINK(skb)		NULL
-#define	PKTSETCLINK(skb, x)
+#define	PKTSETCLINK(skb, x)	BCM_REFERENCE(skb)
 #define FOREACH_CHAINED_PKT(skb, nskb) \
 	for ((nskb) = NULL; (skb) != NULL; (skb) = (nskb))
 #define	PKTCFREE		PKTFREE
-#endif 
+#define PKTCENQTAIL(h, t, p) \
+do { \
+	if ((t) == NULL) { \
+		(h) = (t) = (p); \
+	} \
+} while (0)
+#endif /* !linux || !PKTC */
 
-#define PKTSETCHAINED(osh, skb)
-#define PKTCLRCHAINED(osh, skb)
-#define PKTISCHAINED(skb)	(FALSE)
+#if !defined(HNDCTF) && !defined(PKTC_TX_DONGLE) && !(defined(__NetBSD__) && \
+	defined(PKTC))
+#define PKTSETCHAINED(osh, skb)		BCM_REFERENCE(osh)
+#define PKTCLRCHAINED(osh, skb)		BCM_REFERENCE(osh)
+#define PKTISCHAINED(skb)		FALSE
+#endif
 
-#endif	
+#ifndef _RTE_
+/* Lbuf with fraglist */
+#define PKTFRAGPKTID(osh, lb)		(0)
+#define PKTSETFRAGPKTID(osh, lb, id)	BCM_REFERENCE(osh)
+#define PKTFRAGTOTNUM(osh, lb)		(0)
+#define PKTSETFRAGTOTNUM(osh, lb, tot)	BCM_REFERENCE(osh)
+#define PKTFRAGTOTLEN(osh, lb)		(0)
+#define PKTSETFRAGTOTLEN(osh, lb, len)	BCM_REFERENCE(osh)
+#define PKTIFINDEX(osh, lb)		(0)
+#define PKTSETIFINDEX(osh, lb, idx)	BCM_REFERENCE(osh)
+#define	PKTGETLF(osh, len, send, lbuf_type)	(0)
+
+/* in rx path, reuse totlen as used len */
+#define PKTFRAGUSEDLEN(osh, lb)			(0)
+#define PKTSETFRAGUSEDLEN(osh, lb, len)		BCM_REFERENCE(osh)
+
+#define PKTFRAGLEN(osh, lb, ix)			(0)
+#define PKTSETFRAGLEN(osh, lb, ix, len)		BCM_REFERENCE(osh)
+#define PKTFRAGDATA_LO(osh, lb, ix)		(0)
+#define PKTSETFRAGDATA_LO(osh, lb, ix, addr)	BCM_REFERENCE(osh)
+#define PKTFRAGDATA_HI(osh, lb, ix)		(0)
+#define PKTSETFRAGDATA_HI(osh, lb, ix, addr)	BCM_REFERENCE(osh)
+
+/* RX FRAG */
+#define PKTISRXFRAG(osh, lb)    	(0)
+#define PKTSETRXFRAG(osh, lb)		BCM_REFERENCE(osh)
+#define PKTRESETRXFRAG(osh, lb)		BCM_REFERENCE(osh)
+
+/* TX FRAG */
+#define PKTISTXFRAG(osh, lb)		(0)
+#define PKTSETTXFRAG(osh, lb)		BCM_REFERENCE(osh)
+
+/* Need Rx completion used for AMPDU reordering */
+#define PKTNEEDRXCPL(osh, lb)           (TRUE)
+#define PKTSETNORXCPL(osh, lb)          BCM_REFERENCE(osh)
+#define PKTRESETNORXCPL(osh, lb)        BCM_REFERENCE(osh)
+
+#define PKTISFRAG(osh, lb)		(0)
+#define PKTFRAGISCHAINED(osh, i)	(0)
+/* TRIM Tail bytes from lfrag */
+#define PKTFRAG_TRIM_TAILBYTES(osh, p, len)	PKTSETLEN(osh, p, PKTLEN(osh, p) - len)
+#endif	/* _RTE_ */
+
+#ifndef MALLOC_PERSIST
+	#define MALLOC_PERSIST MALLOC
+	#define MALLOC_PERSIST_ATTACH MALLOC
+	#define MALLOCZ_PERSIST MALLOCZ
+	#define MALLOCZ_PERSIST_ATTACH MALLOCZ
+	#define MFREE_PERSIST MFREE
+#endif /* MALLOC_PERSIST */
+
+#ifndef ROMMABLE_ASSERT
+#define ROMMABLE_ASSERT(exp) ASSERT(exp)
+#endif /* ROMMABLE_ASSERT */
+
+#endif	/* _osl_h_ */
