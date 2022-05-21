@@ -145,10 +145,10 @@ wl-objs            += src/shared/hnddma.o
 wl-objs            += src/shared/nicpci.o
 wl-objs            += src/shared/aiutils.o
 wl-objs            += src/shared/bcmsrom.o
-wl-objs            += src/shared/nvram_ro.o
+wl-objs            += src/shared/nvram_rw.o
 wl-objs            += src/shared/bcmotp.o
 
-EXTRA_CFLAGS       += -I$(src)/src/include
+EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/LZMA-SDK/C
 EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include -I$(src)/src/math/include
 EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
 EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib
@@ -161,8 +161,6 @@ ifeq "$(GE_49)" "1"
 EXTRA_CFLAGS       += -Wno-date-time
 endif
 
-EXTRA_LDFLAGS      := $(src)/lib/wl_preprocessed.o
-
 KBASE              ?= /lib/modules/`uname -r`
 KBUILD_DIR         ?= $(KBASE)/build
 MDEST_DIR          ?= $(KBASE)/kernel/drivers/net/wireless
@@ -170,8 +168,6 @@ MDEST_DIR          ?= $(KBASE)/kernel/drivers/net/wireless
 # Cross compile setup.  Tool chain and kernel tree, replace with your own.
 CROSS_TOOLS        = /home/sodo/openwrt/staging_dir/toolchain-arm_cortex-a9_gcc-11.2.0_musl_eabi/bin/arm-openwrt-linux-
 CROSS_KBUILD_DIR   = /home/sodo/openwrt/build_dir/target-arm_cortex-a9_musl_eabi/linux-bcm53xx_generic/linux-5.10.113
-KBUILD_EXTRA_SYMBOLS := $(src)/emf/Module.symvers
-KBUILD_EXTRA_SYMBOLS += $(src)/igs/Module.symvers
 
 all:
 	KBUILD_NOPEDANTIC=1 make -C $(KBUILD_DIR) M=`pwd`

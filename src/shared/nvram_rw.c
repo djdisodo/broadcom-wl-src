@@ -451,8 +451,8 @@ BCMINITFN(nvram_exit)(void *si)
  * free, and the debug code checks if they are valid, so pass NULL as the osh
  * to tell the OSL that we don't have a valid osh
  */
-static void *SzAlloc(void *p, size_t size) { p = p; return MALLOC(NULL, size); }
-static void SzFree(void *p, void *address) { p = p; MFREE(NULL, address, 0); }
+static void *SzAlloc(const ISzAlloc *p, size_t size) { p = p; return MALLOC(NULL, size); }
+static void SzFree(const ISzAlloc *p, void *address) { p = p; MFREE(NULL, address, 0); }
 static ISzAlloc g_Alloc = { SzAlloc, SzFree };
 
 int

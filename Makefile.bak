@@ -145,10 +145,10 @@ wl-objs            += src/shared/hnddma.o
 wl-objs            += src/shared/nicpci.o
 wl-objs            += src/shared/aiutils.o
 wl-objs            += src/shared/bcmsrom.o
-wl-objs            += src/shared/nvram_ro.o
+wl-objs            += src/shared/nvram_rw.o
 wl-objs            += src/shared/bcmotp.o
 
-EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/src/common/include -I$(src)/src/proto/include
+EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/LZMA-SDK/C
 EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include -I$(src)/src/math/include
 EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
 EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib
@@ -160,8 +160,6 @@ EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A
 ifeq "$(GE_49)" "1"
 EXTRA_CFLAGS       += -Wno-date-time
 endif
-
-EXTRA_LDFLAGS      := $(src)/lib/wl_preprocessed.o
 
 KBASE              ?= /lib/modules/`uname -r`
 KBUILD_DIR         ?= $(KBASE)/build

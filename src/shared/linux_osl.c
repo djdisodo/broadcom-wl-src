@@ -25,6 +25,10 @@
 #include <linuxver.h>
 #include <bcmdefs.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#include <linux/dma-direct.h>
+#endif
+
 #ifdef mips
 #include <asm/paccess.h>
 #include <asm/cache.h>
