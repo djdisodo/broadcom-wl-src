@@ -48,7 +48,7 @@
 #include <wlc_channel.h>
 #include <wlc_pub.h>
 #include <wl_linux.h>
-#include <wl_linux_dslcpe.h>
+#include "wl_linux_dslcpe.h"
 
 #if defined(CONFIG_BCM_BPM) || defined(CONFIG_BCM_BPM_MODULE)
 #include <linux/gbpm.h>

@@ -26,6 +26,7 @@
 #include <wlc_phy_shim.h>
 #include <net/mac80211.h>	/* struct wiphy */
 #include "bcmwifi.h"		/* chanspec_t */
+#include <bcmutils.h> //TODO revisit
 
 #define	IDCODE_VER_MASK		0x0000000f
 #define	IDCODE_VER_SHIFT	0

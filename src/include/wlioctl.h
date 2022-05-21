@@ -719,10 +719,11 @@ typedef struct wl_extjoin_params {
 
 #define ANT_SELCFG_MAX		4	/* max number of antenna configurations */
 #define MAX_STREAMS_SUPPORTED	4	/* max number of streams supported */
-typedef struct {
-	uint8 ant_config[ANT_SELCFG_MAX];	/* antenna configuration */
-	uint8 num_antcfg;	/* number of available antenna configurations */
-} wlc_antselcfg_t;
+//TODO revisit
+//typedef struct {
+//	uint8 ant_config[ANT_SELCFG_MAX];	/* antenna configuration */
+//	uint8 num_antcfg;	/* number of available antenna configurations */
+//} wlc_antselcfg_t;
 
 typedef struct {
 	uint32 duration;	/* millisecs spent sampling this channel */
@@ -1134,13 +1135,14 @@ typedef struct {
 
 #define	WLC_NUMRATES	16	/* max # of rates in a rateset */
 
-typedef struct wlc_rateset {
-	uint32	count;			/* number of rates in rates[] */
-	uint8	rates[WLC_NUMRATES];	/* rates in 500kbps units w/hi bit set if basic */
-	uint8	htphy_membership;	/* HT PHY Membership */
-	uint8	mcs[MCSSET_LEN];	/* supported mcs index bit map */
-	uint16  vht_mcsmap;		/* supported vht mcs nss bit map */
-} wlc_rateset_t;
+//TODO revisit
+//typedef struct wlc_rateset {
+//	uint32	count;			/* number of rates in rates[] */
+//	uint8	rates[WLC_NUMRATES];	/* rates in 500kbps units w/hi bit set if basic */
+//	uint8	htphy_membership;	/* HT PHY Membership */
+//	uint8	mcs[MCSSET_LEN];	/* supported mcs index bit map */
+//	uint16  vht_mcsmap;		/* supported vht mcs nss bit map */
+//} wlc_rateset_t;
 
 /* Used to get specific STA parameters */
 typedef struct {
@@ -1705,10 +1707,10 @@ typedef struct  wl_chanspec_txpwr_max {
 #define WL_CHANSPEC_TXPWR_MAX_LEN	(sizeof(wl_chanspec_txpwr_max_t))
 
 
-typedef struct tx_inst_power {
-	uint8 txpwr_est_Pout[2];			/* Latest estimate for 2.4 and 5 Ghz */
-	uint8 txpwr_est_Pout_gofdm;			/* Pwr estimate for 2.4 OFDM */
-} tx_inst_power_t;
+//typedef struct tx_inst_power {
+//	uint8 txpwr_est_Pout[2];			/* Latest estimate for 2.4 and 5 Ghz */
+//	uint8 txpwr_est_Pout_gofdm;			/* Pwr estimate for 2.4 OFDM */
+//} tx_inst_power_t;
 
 #define WL_NUM_TXCHAIN_MAX	4
 typedef struct wl_txchain_pwr_offsets {

@@ -19,6 +19,8 @@
 
 #include "wlc_types.h"		/* forward structure declarations */
 #include "bcmwifi.h"		/* for chanspec_t */
+#include <bcmutils.h> //TODO revisit
+#include <wlc_scb.h> //TODO revisit
 
 #define	WLC_NUMRATES	16	/* max # of rates in a rateset */
 #define	MAXMULTILIST	32	/* max # multicast addresses */
