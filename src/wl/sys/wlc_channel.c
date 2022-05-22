@@ -750,6 +750,7 @@ BCMATTACHFN(wlc_channel_mgr_attach)(wlc_info_t *wlc)
 	    (CHIPID(pub->sih->chip) != BCM43228_CHIP_ID) &&
 	    (CHIPID(pub->sih->chip) != BCM4331_CHIP_ID) &&
 	    (CHIPID(pub->sih->chip) != BCM43142_CHIP_ID) &&
+        (CHIPID(pub->sih->chip) != BCM4360_CHIP_ID) &&
 	    (CHIPID(pub->sih->chip) != BCM43428_CHIP_ID)) {
 		printf("Broadcom vers %s: Unsupported Chip (%x)\n",
 			EPI_VERSION_STR, pub->sih->chip);

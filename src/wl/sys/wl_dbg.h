@@ -199,9 +199,9 @@ extern uint32 wl_ampdu_dbg;
 #ifdef BCMDBG_ERR
 #define	WL_ERROR(args)		WL_PRINT(args)
 #else
-#define	WL_ERROR(args)
+#define	WL_ERROR(args)		do {WL_PRINT(args);} while (0)
 #endif /* BCMDBG_ERR */
-#define	WL_TRACE(args)
+#define	WL_TRACE(args)		do {WL_PRINT(args);} while (0)
 #ifndef LINUX_POSTMOGRIFY_REMOVAL
 #ifdef WLMSG_PRHDRS
 #define WL_PRHDRS(i, p, f, t, r, l)	wlc_print_hdrs(i, p, f, t, r, l)

@@ -13756,8 +13756,8 @@ _wlc_ioctl(wlc_info_t *wlc, int cmd, void *arg, int len, struct wlc_if *wlcif)
 			 * which test followed by a wsec_key_t.  Others may be
 			 * implemented that won't have a wsec_key_t.
 			 */
-			bcmerror = wlc_key_set_error(wlc, bsscfg, val,
-			                             (wl_wsec_key_t *) (((uchar*)arg)+4));
+			//bcmerror = wlc_key_set_error(wlc, bsscfg, val,
+			//                             (wl_wsec_key_t *) (((uchar*)arg)+4)); //TODO revisit
 		} else
 			bcmerror = BCME_RANGE;
 		break;

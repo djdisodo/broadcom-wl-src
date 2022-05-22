@@ -327,9 +327,6 @@ wlc_key.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_key.c \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_types.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_utils.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/ctf/hndctf.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmip.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/vlan.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_key.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_bsscfg.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_types.h \

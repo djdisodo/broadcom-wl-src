@@ -144,6 +144,8 @@ wl-objs            += src/wl/ppr/src/wlc_ppr.o
 wl-objs            += src/wl/clm/src/wlc_clm.o
 wl-objs            += src/wl/clm/src/wlc_clm_data.o
 
+#wl-objs := src/wl/sys/wlc_key.o
+
 #wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
 
 wl-objs            += src/shared/linux_osl.o
@@ -165,6 +167,8 @@ wl-objs            += src/shared/bcm_mpool.o
 wl-objs            += src/shared/bcm_notif.o
 wl-objs            += src/shared/qmath.o
 wl-objs            += src/shared/bcmwpa.o
+wl-objs            += src/shared/bcm_ol_msg.o
+wl-objs            += src/shared/bcmevent.o
 wl-objs            += src/shared/bcmwifi/src/bcmwifi_channels.o
 
 wl-objs            += src/bcmcrypto/rc4.o
@@ -185,8 +189,8 @@ EXTRA_CFLAGS       += -I$(src)/src/wl/ppr/include
 EXTRA_CFLAGS       += -I$(src)/src/wl/clm/include
 EXTRA_CFLAGS       += -I$(src)/src/bcm963xx
 EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib -DWL11H -DWLC_HIGH -DAP -DSTA -DDSLCPE_WLAN_VERSION="\"0\"" -DTYPEDEF_BOOL -DLINUX_PORT
-EXTRA_CFLAGS       += -Wno-error=date-time -DBCMEXTNVM -DBCMHOSTVARS -DWLCNT -DWL11AC -DWL11N -DPPR_API -DUSE_IW -D_BCM96362_ -DWLTPC
-EXTRA_CFLAGS       += -DUBUS_DISABLE -DWL_AP_TPC -DWLCSA
+EXTRA_CFLAGS       += -Wno-error=date-time -DBCMEXTNVM -DBCMHOSTVARS -DWLCNT -DWL11AC -DWL11N -DPPR_API -DWLTPC
+EXTRA_CFLAGS       += -DUBUS_DISABLE -DWL_AP_TPC -DWLCSA -DLINUXSTA_PS -DPCOEM_LINUXSTA -DWLOFFLD -DCONFIG_XIP -DBCMHIGHSDIO -DBCMDBG -DWLMSG_INFORM -DDBAND
 
 #idk wtf
 EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A

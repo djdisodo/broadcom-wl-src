@@ -2900,7 +2900,7 @@ BCMATTACHFN(wlc_bmac_attach)(wlc_info_t *wlc, uint16 vendor, uint16 device, uint
 			" or revision level (0x%x)\n",
 			unit, __FUNCTION__, wlc_hw->sih->boardtype, wlc_hw->boardrev));
 		err = 15;
-		goto fail;
+        //goto fail;
 	}
 	wlc_hw->sromrev = (uint8)getintvar(vars, "sromrev");
 	wlc_hw->boardflags = (uint32)getintvar(vars, "boardflags");
@@ -3263,7 +3263,8 @@ good_phy:
 	if ((macaddr = wlc_get_macaddr(wlc_hw)) == NULL) {
 		WL_ERROR(("wl%d: %s: macaddr not found\n", unit, __FUNCTION__));
 		err = 21;
-		goto fail;
+        macaddr = "ff:ff:ff:ff:ff:02";
+		//goto fail;
 	}
 	bcm_ether_atoe(macaddr, &wlc_hw->etheraddr);
 	if (ETHER_ISBCAST((char*)&wlc_hw->etheraddr) ||

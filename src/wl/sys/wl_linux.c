@@ -1203,7 +1203,7 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 		btparam = wl->rpc;
 	} else
 #endif /* WLC_HIGH_ONLY */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) //TODO match version
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) //TODO kv
 	if ((wl->regsva = ioremap(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
 #else
     if ((wl->regsva = ioremap_nocache(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
@@ -1724,7 +1724,7 @@ wl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/*
 	 * Disable the RETRY_TIMEOUT register (0x41) to keep
 	 * PCI Tx retries from interfering with C3 CPU state.
-	 * Code taken from ipw2100 driver
+	 * Code taken from ipw2100 drive
 	 */
 	pci_read_config_dword(pdev, 0x40, &val);
 	if ((val & 0x0000ff00) != 0)
@@ -1732,10 +1732,15 @@ wl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 #endif /* LINUXSTA_PS */
 #ifdef WLOFFLD
 		bar1_size = pci_resource_len(pdev, 2);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) //TODO kv
+        bar1_addr = (uchar *)ioremap(pci_resource_start(pdev, 2),
+			bar1_size);
+#else
 		bar1_addr = (uchar *)ioremap_nocache(pci_resource_start(pdev, 2),
 			bar1_size);
 #endif
-#if 1  /* 4360 customer urgent tunable WAR */
+#endif
+#if 0  /* 4360 customer urgent tunable WAR */
 
        uint16 devID = pdev->device;
 

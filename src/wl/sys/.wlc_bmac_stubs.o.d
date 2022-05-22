@@ -328,9 +328,6 @@ wlc_bmac_stubs.o: \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_types.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_utils.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/ctf/hndctf.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmip.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/vlan.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_key.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmcrypto/tkhash.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_bsscfg.h \
@@ -345,6 +342,8 @@ wlc_bmac_stubs.o: \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/ppr/include/wlc_ppr.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_channel.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/clm/include/wlc_clm.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_rpc.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/rpc_osl.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_hw.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_notif_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_hw_priv.h \
@@ -352,8 +351,6 @@ wlc_bmac_stubs.o: \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_bmac.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_xdr.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_rpc_tp.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_rpc.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/rpc_osl.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_rpc.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_apps.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_frmutil.h \
