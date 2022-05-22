@@ -20,6 +20,7 @@
 
 /* FILE-CSTYLED Cannot figure out how to make the initialization continuation lines acceptable */
 
+#include <sbchipc.h>
 /* Types of flashes we know about */
 typedef enum _flash_type {OLD, BSC, SCS, AMD, SST, SFLASH} flash_type_t;
 

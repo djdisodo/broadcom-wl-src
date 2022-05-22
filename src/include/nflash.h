@@ -21,6 +21,8 @@
 #ifndef _nflash_h_
 #define _nflash_h_
 
+#include <sbchipc.h>
+
 /* Nand flash AC timing (in unit of ns) for BCM4706 (rev 31) */
 #define NFLASH_T_WP					15
 #define NFLASH_T_RR					20

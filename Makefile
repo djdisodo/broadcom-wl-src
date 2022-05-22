@@ -170,6 +170,8 @@ wl-objs            += src/shared/bcmwpa.o
 wl-objs            += src/shared/bcm_ol_msg.o
 wl-objs            += src/shared/bcmevent.o
 wl-objs            += src/shared/bcmwifi/src/bcmwifi_channels.o
+wl-objs            += src/shared/hndnand.o
+wl-objs            += src/shared/nandcore.o
 
 wl-objs            += src/bcmcrypto/rc4.o
 wl-objs            += src/bcmcrypto/wep.o
@@ -191,6 +193,7 @@ EXTRA_CFLAGS       += -I$(src)/src/bcm963xx
 EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib -DWL11H -DWLC_HIGH -DAP -DSTA -DDSLCPE_WLAN_VERSION="\"0\"" -DTYPEDEF_BOOL -DLINUX_PORT
 EXTRA_CFLAGS       += -Wno-error=date-time -DBCMEXTNVM -DBCMHOSTVARS -DWLCNT -DWL11AC -DWL11N -DPPR_API -DWLTPC
 EXTRA_CFLAGS       += -DUBUS_DISABLE -DWL_AP_TPC -DWLCSA -DLINUXSTA_PS -DPCOEM_LINUXSTA -DWLOFFLD -DCONFIG_XIP -DBCMHIGHSDIO -DBCMDBG -DWLMSG_INFORM -DDBAND
+EXTRA_CFLAGS       += -DAPSTA
 
 #idk wtf
 EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A

@@ -1740,7 +1740,7 @@ wl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			bar1_size);
 #endif
 #endif
-#if 0  /* 4360 customer urgent tunable WAR */
+#if 1  /* 4360 customer urgent tunable WAR */ // can 4360 support 2.4?
 
        uint16 devID = pdev->device;
 
