@@ -15,6 +15,8 @@
 #ifndef _wl_linux_dslcpe_h_
 #define _wl_linux_dslcpe_h_
 
+extern unsigned char brcm_smp;
+
 #ifndef DSL_VERSION_MAJOR_CODE
 #define DSL_VERSION_MAJOR_CODE ((DSL_LINUX_VERSION_CODE>>8)<<8)
 #endif

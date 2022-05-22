@@ -164,11 +164,15 @@ dev_wlc_ioctl(
 	/* Causes an extraneous 'up'.  If specific ioctls are failing due
 	   to device down, then we can investigate those ioctls.
 	*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10 ,0) //TODO kv
+    dev_open(dev, NULL);
+#else
 	dev_open(dev);
+#endif
 #endif
 
 	fs = get_fs();
-	set_fs(get_ds());
+	set_fs(KERNEL_DS);
 #if defined(WL_USE_NETDEV_OPS)
 	ret = dev->netdev_ops->ndo_do_ioctl(dev, &ifr, SIOCDEVPRIVATE);
 #else

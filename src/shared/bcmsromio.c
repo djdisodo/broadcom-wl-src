@@ -56,7 +56,7 @@ int readSromFile(si_t *sih, uint chipId, void *buf, uint nbytes, char *pBoardId)
 
 	if(!IS_ERR(fp) && fp->f_op && fp->f_op->read ) {
 		fs = get_fs();
-		set_fs(get_ds());
+		set_fs(KERNEL_DS);
 		
 		fp->f_pos = 0;
 	
@@ -278,7 +278,7 @@ int BCMATTACHFN(init_sromvars_map)(si_t *sih, uint chipId, void *buf, uint nbyte
 
 	if(!IS_ERR(fp) && fp->f_op && fp->f_op->read ) {
 		fs = get_fs();
-		set_fs(get_ds());
+		set_fs(KERNEL_DS);
 		
 		fp->f_pos = 0;
 		size = fp->f_op->read(fp, (void *)buf, VARS_MAX, &fp->f_pos);
@@ -332,7 +332,7 @@ int read_nvramfile(char *fname, void *buf)
 	fp = filp_open(fname, O_RDONLY, 0);
 	if(!IS_ERR(fp) && fp->f_op && fp->f_op->read ) {
 		fs = get_fs();
-		set_fs(get_ds());
+		set_fs(KERNEL_DS);
 
 		fp->f_pos = 0;
 		size = fp->f_op->read(fp, (void *)buf, VARS_MAX, &fp->f_pos);

@@ -1,7 +1,9 @@
-wl_linux.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.c \
+wlc_rwl.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_rwl.c \
  include/linux/kconfig.h include/generated/autoconf.h \
  include/linux/compiler_types.h include/linux/compiler_attributes.h \
  include/linux/compiler-gcc.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_cfg.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlconf.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/typedefs.h \
  include/generated/uapi/linux/version.h include/linux/types.h \
  include/uapi/linux/types.h arch/arm/include/uapi/asm/types.h \
@@ -13,6 +15,8 @@ wl_linux.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.c \
  arch/arm/include/uapi/asm/posix_types.h \
  include/uapi/asm-generic/posix_types.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmdefs.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/osl.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/linux_osl.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/linuxver.h \
  include/linux/kconfig.h include/linux/module.h include/linux/list.h \
  include/linux/poison.h include/linux/const.h include/vdso/const.h \
@@ -295,42 +299,12 @@ wl_linux.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.c \
  include/linux/unaligned/le_struct.h \
  include/linux/unaligned/packed_struct.h \
  include/linux/unaligned/be_byteshift.h include/linux/unaligned/generic.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/osl.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/linux_osl.h \
- include/linux/proc_fs.h include/linux/usb.h include/linux/usb/ch9.h \
- include/uapi/linux/usb/ch9.h include/linux/pm_runtime.h \
- include/linux/syscalls.h include/linux/personality.h \
- include/uapi/linux/personality.h include/trace/syscall.h \
- include/linux/tracepoint.h include/linux/static_call.h \
- include/linux/cpu.h include/linux/node.h include/linux/cpuhotplug.h \
- include/linux/trace_events.h include/linux/ring_buffer.h \
- include/linux/poll.h include/uapi/linux/poll.h \
- arch/arm/include/generated/uapi/asm/poll.h \
- include/uapi/asm-generic/poll.h include/uapi/linux/eventpoll.h \
- include/linux/trace_seq.h include/linux/seq_buf.h \
- include/linux/perf_event.h include/uapi/linux/perf_event.h \
- include/uapi/linux/bpf_perf_event.h \
- arch/arm/include/generated/uapi/asm/bpf_perf_event.h \
- include/uapi/asm-generic/bpf_perf_event.h include/linux/ptrace.h \
- include/linux/pid_namespace.h include/uapi/linux/ptrace.h \
- include/linux/ftrace.h include/linux/trace_clock.h \
- arch/arm/include/generated/asm/trace_clock.h \
- include/asm-generic/trace_clock.h arch/arm/include/asm/ftrace.h \
- include/linux/irq_work.h arch/arm/include/asm/irq_work.h \
- arch/arm/include/asm/smp_plat.h arch/arm/include/asm/cpu.h \
- arch/arm/include/asm/cputype.h include/linux/jump_label_ratelimit.h \
- include/linux/perf_regs.h include/linux/sched/task_stack.h \
- include/uapi/linux/magic.h arch/arm/include/uapi/asm/perf_regs.h \
- arch/arm/include/generated/asm/local.h include/asm-generic/local.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/802.1d.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/epivers.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmendian.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmutils.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/siutils.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/wlioctl.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/ethernet.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/packed_section_start.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/packed_section_end.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmutils.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/pcicfg.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/wlioctl.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmeth.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmevent.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/802.11.h \
@@ -339,12 +313,6 @@ wl_linux.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.c \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/shared/bcmwifi/include/bcmwifi_rates.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_mpool_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmcdc.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_key.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmcrypto/tkhash.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmip.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_channel.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/phy/wlc_phy_hal.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/siutils.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/d11.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmdevs.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/hndsoc.h \
@@ -352,22 +320,29 @@ wl_linux.o: /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.c \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/aidmp.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/sbhndpio.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/sbhnddma.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_phy_shim.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/ppr/include/wlc_ppr.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/clm/include/wlc_clm.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_rate.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_key.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcmcrypto/tkhash.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_types.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_utils.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_cfg.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/ctf/hndctf.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/bcmip.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/proto/vlan.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_bsscfg.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_types.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_pub.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_rate.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_dbg.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_iw.h \
- include/linux/wireless.h include/uapi/linux/wireless.h \
- include/net/iw_handler.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_event.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_pio.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/phy/wlc_phy_hal.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_phy_shim.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/ppr/include/wlc_ppr.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_channel.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/clm/include/wlc_clm.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_hw.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/hnddma.h \
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/include/bcm_notif_pub.h \
  /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_export.h \
- /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wl_linux.h \
- include/linux/rfkill.h include/uapi/linux/rfkill.h include/linux/leds.h \
- include/dt-bindings/leds/common.h
+ /home/sodo/broadcom-wl-asuswrt-ac87u/src/wl/sys/wlc_rwl.h

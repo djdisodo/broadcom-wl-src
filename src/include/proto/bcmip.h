@@ -265,7 +265,7 @@ struct inv6_addr {
 			(((a).s6_addr32[1])^((b).s6_addr32[1])) ||\
 			(((a).s6_addr32[2])^((b).s6_addr32[2])) ||\
 			(((a).s6_addr32[3])^((b).s6_addr32[3]))))
-
+/* TODO revisit
 struct ipv6_hdr {
          uint8                    version:4,
                                  priority:4;
@@ -277,5 +277,6 @@ struct ipv6_hdr {
  
          struct  inv6_addr        saddr;
          struct  inv6_addr        daddr;
- }; 
+ };
+*/
 #endif	/* _bcmip_h_ */

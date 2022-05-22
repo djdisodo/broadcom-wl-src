@@ -25,7 +25,7 @@
 #include <mips33_core.h>
 #include <mips74k_core.h>
 #elif defined(__arm__) || defined(__thumb__) || defined(__thumb2__)
-#include <sbhndarm.h>
+//#include <sbhndarm.h>
 #endif
 
 #endif /* _sbhndcpu_h_ */

@@ -131,12 +131,22 @@ endif
 
 obj-m              += wl.o
 
-wl-objs            :=
-wl-objs            += src/shared/linux_osl.o
-wl-objs            += src/wl/sys/wl_linux.o
-#wl-objs            += src/wl/sys/wl_iw.o
+
+WL_SRCS := $(wildcard src/wl/phy/*.c)
+
+WL_OBJS            := $(patsubst %.c,%.o,$(WL_SRCS))
+
+#$(info $$WL_OBJS is [${WL_OBJS}])
+
+wl-objs := src/wl/sys/d11ucode_2w.o src/wl/sys/d11ucode_ge24.o src/wl/sys/d11ucode_ge40.o src/wl/sys/d11ucode_gt15.o src/wl/sys/d11ucode_le15.o src/wl/sys/d11ucode_p2p.o src/wl/sys/d11ucode_wowl.o src/wl/sys/wlc_11d.o src/wl/sys/wlc_11h.o src/wl/sys/wlc_11u.o src/wl/sys/wlc_alloc.o src/wl/sys/wlc_antsel.o src/wl/sys/wlc_ap.o src/wl/sys/wlc_apcs.o src/wl/sys/wlc_apps.o src/wl/sys/wlc_assoc.o src/wl/sys/wlc_bmac.o src/wl/sys/wlc_bsscfg.o src/wl/sys/wlc_bssload.o src/wl/sys/wlc.o src/wl/sys/wlc_cca.o src/wl/sys/wlc_channel.o src/wl/sys/wlc_cntry.o src/wl/sys/wlc_csa.o src/wl/sys/wlc_dfs.o src/wl/sys/wlc_diag.o src/wl/sys/wlc_dls.o src/wl/sys/wlc_event.o src/wl/sys/wlc_hrt.o src/wl/sys/wlc_hw.o src/wl/sys/wlc_interfere.o src/wl/sys/wlc_intr.o src/wl/sys/wlc_lq.o src/wl/sys/wlc_mbss.o src/wl/sys/wlc_offloads.o src/wl/sys/wlc_phy_shim.o src/wl/sys/wlc_probresp.o src/wl/sys/wlc_prot.o src/wl/sys/wlc_prot_g.o src/wl/sys/wlc_prot_n.o src/wl/sys/wlc_quiet.o src/wl/sys/wlc_rate.o src/wl/sys/wlc_rate_sel.o src/wl/sys/wlc_rm.o src/wl/sys/wlc_scan.o src/wl/sys/wlc_scb.o src/wl/sys/wlc_scb_ratesel.o src/wl/sys/wlc_stf.o src/wl/sys/wlc_tpc.o src/wl/sys/wlc_tso.o src/wl/sys/wlc_txbf.o src/wl/sys/wlc_utils.o src/wl/sys/wlc_vht.o src/wl/sys/wlc_vndr_ie_list.o src/wl/sys/wlc_wet.o src/wl/sys/wl_dslcpe_pktc.o src/wl/sys/wl_iw.o src/wl/sys/wl_linux.o
+wl-objs += src/wl/phy/wlc_phy_abg.o src/wl/phy/wlc_phy_ac.o src/wl/phy/wlc_phy_cmn.o src/wl/phy/wlc_phy_ht.o src/wl/phy/wlc_phy_iovar.o src/wl/phy/wlc_phy_lcn40.o src/wl/phy/wlc_phy_lcn.o src/wl/phy/wlc_phy_lp.o src/wl/phy/wlc_phy_n.o src/wl/phy/wlc_phy_radio_n.o src/wl/phy/wlc_phy_ssn.o src/wl/phy/wlc_phytbl_ac.o src/wl/phy/wlc_phytbl_acdc.o src/wl/phy/wlc_phytbl_ht.o src/wl/phy/wlc_phytbl_lcn40.o src/wl/phy/wlc_phytbl_lcn.o src/wl/phy/wlc_phytbl_lp.o src/wl/phy/wlc_phytbl_n.o src/wl/phy/wlc_phytbl_ssn.o
+wl-objs            += src/wl/ppr/src/wlc_ppr.o
+wl-objs            += src/wl/clm/src/wlc_clm.o
+wl-objs            += src/wl/clm/src/wlc_clm_data.o
+
 #wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
 
+wl-objs            += src/shared/linux_osl.o
 wl-objs            += src/shared/bcmutils.o
 wl-objs            += src/shared/siutils.o
 wl-objs            += src/shared/sbutils.o
@@ -146,7 +156,26 @@ wl-objs            += src/shared/nicpci.o
 wl-objs            += src/shared/aiutils.o
 wl-objs            += src/shared/bcmsrom.o
 wl-objs            += src/shared/nvram_rw.o
+wl-objs            += src/shared/nvram.o
 wl-objs            += src/shared/bcmotp.o
+wl-objs            += src/shared/flashutl.o
+wl-objs            += src/shared/sflash.o
+wl-objs            += src/shared/hndsoc.o
+wl-objs            += src/shared/bcm_mpool.o
+wl-objs            += src/shared/bcm_notif.o
+wl-objs            += src/shared/qmath.o
+wl-objs            += src/shared/bcmwpa.o
+wl-objs            += src/shared/bcmwifi/src/bcmwifi_channels.o
+
+wl-objs            += src/bcmcrypto/rc4.o
+wl-objs            += src/bcmcrypto/wep.o
+
+
+
+#wl-objs            += src/shared/bcmsromio.o
+#wl-objs            += src/bcm963xx/board.o
+
+wl-objs            += LZMA-SDK/C/LzmaDec.o
 
 EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/LZMA-SDK/C
 EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/phy
@@ -154,7 +183,10 @@ EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
 EXTRA_CFLAGS       += -I$(src)/src/wl/phy
 EXTRA_CFLAGS       += -I$(src)/src/wl/ppr/include
 EXTRA_CFLAGS       += -I$(src)/src/wl/clm/include
-EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib -DWL11H -DWLC_HIGH -DAP -DSTA -DLINUX_HYBRID -DDSLCPE
+EXTRA_CFLAGS       += -I$(src)/src/bcm963xx
+EXTRA_CFLAGS       += -DBCMDRIVER -DWLC_LOW -nostdlib -DWL11H -DWLC_HIGH -DAP -DSTA -DDSLCPE_WLAN_VERSION="\"0\"" -DTYPEDEF_BOOL -DLINUX_PORT
+EXTRA_CFLAGS       += -Wno-error=date-time -DBCMEXTNVM -DBCMHOSTVARS -DWLCNT -DWL11AC -DWL11N -DPPR_API -DUSE_IW -D_BCM96362_ -DWLTPC
+EXTRA_CFLAGS       += -DUBUS_DISABLE -DWL_AP_TPC -DWLCSA
 
 #idk wtf
 EXTRA_CFLAGS       += -DCONFIG_MMC_MSM7X00A

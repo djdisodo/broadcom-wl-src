@@ -29,6 +29,8 @@
 #ifndef _BCMEVENT_H_
 #define _BCMEVENT_H_
 
+#include <proto/bcmeth.h>
+
 #ifndef _TYPEDEFS_H_
 #include <typedefs.h>
 #endif

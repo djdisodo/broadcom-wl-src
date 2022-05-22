@@ -25,6 +25,9 @@
 #include <wlc_types.h>
 #include <wlc_utils.h>
 #include <wlc_cfg.h>
+#include <proto/bcmevent.h>
+#include <bcmwifi_channels.h>
+#include <wlioctl.h>
 #ifdef HNDCTF
 #include <ctf/hndctf.h>
 #endif

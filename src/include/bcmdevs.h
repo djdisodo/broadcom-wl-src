@@ -130,10 +130,8 @@
 #define BCM4330_D11N5G_ID       0x4362          /* 4330 802.11n 5G device */
 #define BCM4336_D11N_ID		0x4343		/* 4336 802.11n 2.4GHz device */
 #define BCM6362_D11N_ID		0x435f		/* 6362 802.11n dualband device */
-#ifdef DSLCPE
 #define BCM6362_D11N2G_ID	0x433f		/* 6362 802.11n 2.4Ghz band id */ 
 #define BCM6362_D11N5G_ID	0x434f		/* 6362 802.11n 5Ghz band id */
-#endif
 #define BCM4331_D11N_ID		0x4331		/* 4331 802.11n dualband id */
 #define BCM4331_D11N2G_ID	0x4332		/* 4331 802.11n 2.4Ghz band id */
 #define BCM4331_D11N5G_ID	0x4333		/* 4331 802.11n 5Ghz band id */

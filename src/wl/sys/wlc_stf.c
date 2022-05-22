@@ -1392,9 +1392,7 @@ wlc_stf_stbc_tx_get(wlc_info_t* wlc)
 {
 	return wlc->band->band_stf_stbc_tx;
 }
-#ifndef DSLCPE
-static 
-#endif
+
 int8
 wlc_stf_stbc_rx_get(wlc_info_t* wlc)
 {

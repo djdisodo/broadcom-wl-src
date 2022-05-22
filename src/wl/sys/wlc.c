@@ -19818,13 +19818,14 @@ wlc_doiovar(void *hdl, const bcm_iovar_t *vi, uint32 actionid, const char *name,
 	case IOV_GVAL(IOV_BANDUNIT):
 		*ret_int_ptr = wlc->band->bandunit;
 		break;
-
+#ifdef DSLCPE
 	case IOV_SVAL(IOV_FCACHE):
 			wlc->pub->fcache = bool_val;
 		break;
 	case IOV_GVAL(IOV_FCACHE):
 		*ret_int_ptr = (int32)wlc->pub->fcache;
 		break;
+#endif
 
 #if defined(DSLCPE) && defined(WL_ALL_PASSIVE)
 	case IOV_SVAL(IOV_PROCESSOR_ID):

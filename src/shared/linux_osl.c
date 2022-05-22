@@ -949,11 +949,13 @@ osl_pktfree(osl_t *osh, void *p, bool send)
                 /* if current cpu is not 0 then put the skb on a queue, and 
                  * it will be freed later. This helps to reduce cpu1 usage now
                  */
+                /* TODO FIX
                 if(raw_smp_processor_id())
                 {
                     dev_kfree_skb_thread(skb);
                 }
                 else
+                */
 #endif
                 {
                     if (skb->destructor)
@@ -2019,7 +2021,11 @@ osl_os_get_image_block(char *buf, int len, void *image)
 	if (!image)
 		return 0;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) //TODO kv
+    rdlen = kernel_read(fp, buf, len, (long long int)fp->f_pos);
+#else
 	rdlen = kernel_read(fp, fp->f_pos, buf, len);
+#endif
 	if (rdlen > 0)
 		fp->f_pos += rdlen;
 

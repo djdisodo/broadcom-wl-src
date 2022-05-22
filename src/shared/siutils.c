@@ -1064,10 +1064,12 @@ BCMATTACHFN(si_doattach)(si_info_t *sii, uint devid, osl_t *osh, void *regs,
 			SI_MSG(("Found chip type NAI (0x%08x)\n", w));
 		/* pass chipc address instead of original core base */
 		ai_scan(&sii->pub, (void *)(uintptr)cc, devid);
+#ifndef UBUS_DISABLE
 	} else if (CHIPTYPE(sii->pub.socitype) == SOCI_UBUS) {
 		SI_MSG(("Found chip type UBUS (0x%08x), chip id = 0x%4x\n", w, sih->chip));
 		/* pass chipc address instead of original core base */
 		ub_scan(&sii->pub, (void *)(uintptr)cc, devid);
+#endif
 	} else {
 		SI_ERROR(("Found chip of unknown type (0x%08x)\n", w));
 		return NULL;
@@ -1524,8 +1526,10 @@ si_flag(si_t *sih)
 		return sb_flag(sih);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_flag(sih);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_flag(sih);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1539,8 +1543,10 @@ si_setint(si_t *sih, int siflag)
 		sb_setint(sih, siflag);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_setint(sih, siflag);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_setint(sih, siflag);
+#endif
 	else
 		ASSERT(0);
 }
@@ -1596,8 +1602,10 @@ si_corevendor(si_t *sih)
 		return sb_corevendor(sih);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_corevendor(sih);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_corevendor(sih);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1617,8 +1625,10 @@ si_corerev(si_t *sih)
 		return sb_corerev(sih);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_corerev(sih);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_corerev(sih);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1701,8 +1711,10 @@ si_setcore(si_t *sih, uint coreid, uint coreunit)
 		return sb_setcoreidx(sih, idx);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_setcoreidx(sih, idx);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_setcoreidx(sih, idx);
+#endif
 	else {
 		ASSERT(0);
 		return NULL;
@@ -1716,8 +1728,10 @@ si_setcoreidx(si_t *sih, uint coreidx)
 		return sb_setcoreidx(sih, coreidx);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_setcoreidx(sih, coreidx);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_setcoreidx(sih, coreidx);
+#endif
 	else {
 		ASSERT(0);
 		return NULL;
@@ -1773,8 +1787,10 @@ si_numaddrspaces(si_t *sih)
 		return sb_numaddrspaces(sih);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_numaddrspaces(sih);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_numaddrspaces(sih);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1788,8 +1804,10 @@ si_addrspace(si_t *sih, uint asidx)
 		return sb_addrspace(sih, asidx);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_addrspace(sih, asidx);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_addrspace(sih, asidx);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1803,8 +1821,10 @@ si_addrspacesize(si_t *sih, uint asidx)
 		return sb_addrspacesize(sih, asidx);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_addrspacesize(sih, asidx);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_addrspacesize(sih, asidx);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1828,8 +1848,10 @@ si_core_cflags(si_t *sih, uint32 mask, uint32 val)
 		return sb_core_cflags(sih, mask, val);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_core_cflags(sih, mask, val);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_core_cflags(sih, mask, val);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1843,8 +1865,10 @@ si_core_cflags_wo(si_t *sih, uint32 mask, uint32 val)
 		sb_core_cflags_wo(sih, mask, val);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_core_cflags_wo(sih, mask, val);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_core_cflags_wo(sih, mask, val);
+#endif
 	else
 		ASSERT(0);
 }
@@ -1856,8 +1880,10 @@ si_core_sflags(si_t *sih, uint32 mask, uint32 val)
 		return sb_core_sflags(sih, mask, val);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_core_sflags(sih, mask, val);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_core_sflags(sih, mask, val);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1871,8 +1897,10 @@ si_iscoreup(si_t *sih)
 		return sb_iscoreup(sih);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_iscoreup(sih);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_iscoreup(sih);
+#endif
 	else {
 		ASSERT(0);
 		return FALSE;
@@ -1895,8 +1923,10 @@ si_corereg(si_t *sih, uint coreidx, uint regoff, uint mask, uint val)
 		return sb_corereg(sih, coreidx, regoff, mask, val);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		return ai_corereg(sih, coreidx, regoff, mask, val);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		return ub_corereg(sih, coreidx, regoff, mask, val);
+#endif
 	else {
 		ASSERT(0);
 		return 0;
@@ -1910,8 +1940,10 @@ si_core_disable(si_t *sih, uint32 bits)
 		sb_core_disable(sih, bits);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_core_disable(sih, bits);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_core_disable(sih, bits);
+#endif
 }
 
 void
@@ -1921,8 +1953,10 @@ si_core_reset(si_t *sih, uint32 bits, uint32 resetbits)
 		sb_core_reset(sih, bits, resetbits);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_core_reset(sih, bits, resetbits);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_core_reset(sih, bits, resetbits);
+#endif
 }
 
 /* Run bist on current core. Caller needs to take care of core-specific bist hazards */
@@ -2452,8 +2486,10 @@ si_dumpregs(si_t *sih, struct bcmstrbuf *b)
 		sb_dumpregs(sih, b);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_dumpregs(sih, b);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_dumpregs(sih, b);
+#endif
 	else
 		ASSERT(0);
 
@@ -2470,8 +2506,10 @@ si_view(si_t *sih, bool verbose)
 		sb_view(sih, verbose);
 	else if ((CHIPTYPE(sih->socitype) == SOCI_AI) || (CHIPTYPE(sih->socitype) == SOCI_NAI))
 		ai_view(sih, verbose);
+#ifndef UBUS_DISABLE
 	else if (CHIPTYPE(sih->socitype) == SOCI_UBUS)
 		ub_view(sih, verbose);
+#endif
 	else
 		ASSERT(0);
 }

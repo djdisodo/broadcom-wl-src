@@ -22,6 +22,7 @@
 #define _wl_linux_h_
 
 #include <wlc_types.h>
+#include <wl_iw.h>
 
 /* WL_ALL_PASSIVE should be defined for high-only driver */
 #if !defined(WLC_LOW) && !defined(WL_ALL_PASSIVE)

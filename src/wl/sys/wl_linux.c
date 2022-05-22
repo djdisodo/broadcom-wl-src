@@ -210,7 +210,13 @@ struct iw_statistics *wl_get_wireless_stats(struct net_device *dev);
 #include <wlc_tso.h>
 #endif /* WL_CSO */
 
-static void wl_timer(ulong data);
+static void wl_timer(
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 00)
+    struct timer_list *tl
+#else
+    ulong data
+#endif
+);
 static void _wl_timer(wl_timer_t *t);
 static struct net_device *wl_alloc_linux_if(wl_if_t *wlif);
 
@@ -1289,7 +1295,7 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 	wlc_iovar_setint(wl->wlc, "qtxpower", 23 * 4);
 #endif
 
-#if !defined(LINUX_HYBRID) && defined(CONFIG_PROC_FS)
+#if !defined(LINUX_HYBRID) && defined(CONFIG_PROC_FS) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) //TODO kv & adapt
 	/* create /proc/net/wl<unit> */
 	sprintf(tmp, "net/wl%d", wl->pub->unit);
 	create_proc_read_entry(tmp, 0, 0, wl_read_proc, (void*)wl);
@@ -1455,7 +1461,7 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 #if defined(DSLCPE) && defined(PKTC) && defined(CONFIG_BLOG)
         wl->pub->brc_hot = (ctf_brc_hot_t *)blog_pktc(BRC_HOT_GET_TABLE_TOP, NULL, 0, 0);
 #endif
-#ifdef HNDCTF
+#if defined(HNDCTF) && defined(CONFIG_BLOG)
 	if ((ctf_dev_register(wl->cih, dev, FALSE) != BCME_OK) ||
 	    (ctf_enable(wl->cih, dev, TRUE, &wl->pub->brc_hot) != BCME_OK)) {
 		WL_ERROR(("wl%d: ctf_dev_register() failed\n", unit));
@@ -4656,7 +4662,7 @@ wl_start(struct sk_buff *skb, struct net_device *dev)
 	if (!dev)
 		return -ENETDOWN;
 
-#if defined(HNDCTF) && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36))
+#if defined(HNDCTF) && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) //TODO kv at pktisowned
 	if (PKTISOWNED(skb)) {
 		PKTCLROWNED(skb);
 		atomic_dec(&skb->users);
@@ -4709,9 +4715,9 @@ wl_start(struct sk_buff *skb, struct net_device *dev)
 		blog_emit( skb, dev, TYPE_ETH, 0, BLOG_WLANPHY );
 	}
 	skb->dev = dev;
-#endif /* CONFIG_BLOG && DSLCPE */
 
 	PKT_PREALLOCINC(wl->osh, skb, 1);
+#endif /* CONFIG_BLOG && DSLCPE */
 	/* Call in the same context when we are UP and non-passive is enabled */
 	if (WL_ALL_PASSIVE_ENAB(wl) || (WL_RTR() && WL_CONFIG_SMP())) {
 		skb->prev = NULL;
@@ -5275,9 +5281,19 @@ wl_timer_task(wl_task_t *task)
 #endif /* WL_ALL_PASSIVE */
 
 static void
-wl_timer(ulong data)
+wl_timer(
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 00)
+        struct timer_list *tl
+#else
+        ulong data
+#endif
+        )
 {
-	wl_timer_t *t = (wl_timer_t *)data;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 00)
+    wl_timer_t *t = from_timer(t, tl, timer);
+#else
+    wl_timer_t *t = (wl_timer_t *)data;
+#endif
 
 	if (!WL_ALL_PASSIVE_ENAB(t->wl))
 		_wl_timer(t);
@@ -5335,9 +5351,13 @@ wl_init_timer(wl_info_t *wl, void (*fn)(void *arg), void *arg, const char *tname
 
 	bzero(t, sizeof(wl_timer_t));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 00)
+    timer_setup(&t->timer, wl_timer, 0);
+#else
 	init_timer(&t->timer);
 	t->timer.data = (ulong) t;
 	t->timer.function = wl_timer;
+#endif
 	t->wl = wl;
 	t->fn = fn;
 	t->arg = arg;
@@ -6533,9 +6553,12 @@ wl_linux_watchdog(void *ctx)
 					stats->rx_length_errors = 0;
 #ifdef DSLCPE
 					stats->multicast =WLCNTVAL(wlcif_stats.rxmcast);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) //TODO kv && adapt
+#else
 					stats->tx_multicast_packets =WLCNTVAL(wlcif_stats.txmcast);
-					stats->tx_broadcast_packets =WLCNTVAL(wlcif_stats.txbcast);
+                    stats->tx_broadcast_packets =WLCNTVAL(wlcif_stats.txbcast);
 					stats->rx_broadcast_packets =WLCNTVAL(wlcif_stats.rxbcast);
+#endif
 #endif
 					/*
 					 * Stats which are not kept per interface
@@ -6645,6 +6668,7 @@ wl_reg_proc_entry(wl_info_t *wl)
 {
 	char tmp[32];
 	sprintf(tmp, "%s%d", HYBRID_PROC, wl->pub->unit);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0) //TODO kv & adapt
 	if ((wl->proc_entry = create_proc_entry(tmp, 0644, NULL)) == NULL) {
 		WL_ERROR(("%s: create_proc_entry %s failed\n", __FUNCTION__, tmp));
 		ASSERT(0);
@@ -6653,6 +6677,7 @@ wl_reg_proc_entry(wl_info_t *wl)
 	wl->proc_entry->read_proc = wl_proc_read;
 	wl->proc_entry->write_proc = wl_proc_write;
 	wl->proc_entry->data = wl;
+#endif
 	return 0;
 }
 #endif /* LINUX_HYBRID */
@@ -6815,10 +6840,10 @@ int wl_config_check(void)
   return 0;
 }
 
+#if defined(DSLCPE) && defined(PKTC)
 int wl_check_fdb_expired(unsigned char *addr)
 {
 	ctf_brc_hot_t *brc_hot;
-	
 	brc_hot = (ctf_brc_hot_t *)blog_pktc(BRC_HOT_GET_BY_DA, NULL, (uint32_t)addr, 0);
 	if (brc_hot && brc_hot->hits) {
 		brc_hot->hits = 0;
@@ -6828,7 +6853,6 @@ int wl_check_fdb_expired(unsigned char *addr)
 	return 1; /* expired */
 }
 
-#if defined(DSLCPE) && defined(PKTC)
 void wl_txchain_lock(wl_pktc_info_t *wl_pktci)
 {
     wl_if_t *wlif = (wl_if_t *)wl_pktci->wlif;
